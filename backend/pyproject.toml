@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "tracelab-backend"
+version = "0.1.0"
+description = "Local-first API for TraceLab"
+authors = ["TraceLab contributors"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.162.0"
+sqlalchemy = "^2.0.0"
+pydantic-settings = "^2.6.0"
+uvicorn = { version = "^0.54.0", extras = ["standard"] }
+
+[tool.poetry.group.dev.dependencies]
+httpx = "^0.28.0"
+pytest = "^9.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
