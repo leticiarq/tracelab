@@ -16,9 +16,17 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
   const labs = initialLabs.map((lab) => ({ ...lab }));
   const evidences: Evidence[] = [];
   let report: Report | null = null;
+  let aiSettings = { enabled: true, model: "qwen3-vl:2b", timeout_seconds: 120, keep_alive: "5m", base_url: "http://127.0.0.1:11434" };
+  const aiStatus = () => ({ enabled: aiSettings.enabled, available: aiSettings.enabled, version: aiSettings.enabled ? "0.12.0" : null, selected_model: aiSettings.model, selected_model_installed: aiSettings.enabled, capabilities: aiSettings.enabled ? { text: true, images: true, declared: ["completion", "vision"] } : null, error: aiSettings.enabled ? null : "A IA está desativada." });
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     const method = init?.method || "GET";
+    if (url.pathname === "/api/ai/settings" && method === "GET") return json(aiSettings);
+    if (url.pathname === "/api/ai/settings" && method === "PATCH") { aiSettings = { ...aiSettings, ...JSON.parse(String(init?.body)) }; return json(aiSettings); }
+    if (url.pathname === "/api/ai/status" && method === "GET") return json(aiStatus());
+    if (url.pathname === "/api/ai/models" && method === "GET") return json([{ name: "qwen3-vl:2b", size: 1_900_000_000, modified_at: null, capabilities: { text: true, images: true, declared: ["completion", "vision"] } }]);
+    if (url.pathname === "/api/ai/test-connection" && method === "POST") return json(aiStatus());
+    if (url.pathname === "/api/ai/test-generation" && method === "POST") return json({ model: aiSettings.model, text: "Geração local funcionando.", done: true });
     if (url.pathname === "/api/platforms" && method === "GET") return json(page([platform]));
     if (url.pathname === "/api/categories" && method === "GET") return json(page([category]));
     if (url.pathname === "/api/labs" && method === "GET") {
@@ -200,5 +208,17 @@ describe("TraceLab", () => {
     installApi([], true); window.history.replaceState({}, "", "/labs"); render(<App />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Database unavailable");
     expect(screen.getByRole("button", { name: "Tentar novamente" })).toBeInTheDocument();
+  });
+
+  it("configura e testa a integração local de IA", async () => {
+    installApi(); window.history.replaceState({}, "", "/settings/ai"); render(<App />);
+    expect(await screen.findByRole("heading", { name: "Configurações de IA" })).toBeInTheDocument();
+    expect(screen.getByText("Ollama disponível")).toBeInTheDocument();
+    expect(screen.getByLabelText("Modelo selecionado")).toHaveValue("qwen3-vl:2b");
+    fireEvent.click(screen.getByRole("button", { name: "Testar geração" }));
+    expect(await screen.findByText("Geração local funcionando.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect((await screen.findAllByText("Desativada")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Testar geração" })).toBeDisabled();
   });
 });

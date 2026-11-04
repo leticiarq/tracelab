@@ -1,4 +1,4 @@
-import type { Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report } from "./types";
+import type { AIGeneration, AIModel, AISettings, AIStatus, Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -128,6 +128,27 @@ export const api = {
   },
   exportReport(labId: number, evidenceIds: number[], sensitiveReviewed: boolean) {
     return requestBlob(`/api/labs/${labId}/report/export`, { method: "POST", body: JSON.stringify({ evidence_ids: evidenceIds, sensitive_reviewed: sensitiveReviewed }) });
+  },
+  getAISettings() {
+    return request<AISettings>("/api/ai/settings");
+  },
+  updateAISettings(data: { enabled?: boolean; model?: string }) {
+    return request<AISettings>("/api/ai/settings", { method: "PATCH", body: JSON.stringify(data) });
+  },
+  getAIStatus() {
+    return request<AIStatus>("/api/ai/status");
+  },
+  listAIModels() {
+    return request<AIModel[]>("/api/ai/models");
+  },
+  testAIConnection() {
+    return request<AIStatus>("/api/ai/test-connection", { method: "POST" });
+  },
+  testAIGeneration() {
+    return request<AIGeneration>("/api/ai/test-generation", { method: "POST" });
+  },
+  cancelAIOperation() {
+    return request<{ cancelled: boolean }>("/api/ai/operations/current", { method: "DELETE" });
   },
 };
 

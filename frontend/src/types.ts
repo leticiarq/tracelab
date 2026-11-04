@@ -78,6 +78,43 @@ export interface Report {
   sensitive_warnings: string[];
 }
 
+export interface AICapabilities {
+  text: boolean;
+  images: boolean;
+  declared: string[];
+}
+
+export interface AIModel {
+  name: string;
+  size: number | null;
+  modified_at: string | null;
+  capabilities: AICapabilities | null;
+}
+
+export interface AISettings {
+  enabled: boolean;
+  model: string;
+  timeout_seconds: number;
+  keep_alive: string;
+  base_url: string;
+}
+
+export interface AIStatus {
+  enabled: boolean;
+  available: boolean;
+  version: string | null;
+  selected_model: string;
+  selected_model_installed: boolean;
+  capabilities: AICapabilities | null;
+  error: string | null;
+}
+
+export interface AIGeneration {
+  model: string;
+  text: string;
+  done: boolean;
+}
+
 export const STATUS_LABELS: Record<LabStatus, string> = {
   todo: "Não iniciado",
   in_progress: "Em andamento",
