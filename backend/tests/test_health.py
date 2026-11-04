@@ -3,13 +3,8 @@ import pytest
 
 from app.main import app
 
+pytestmark = pytest.mark.anyio
 
-@pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
-
-
-@pytest.mark.anyio
 async def test_health_check() -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -19,7 +14,6 @@ async def test_health_check() -> None:
     assert response.json() == {"status": "ok"}
 
 
-@pytest.mark.anyio
 async def test_cors_allows_only_configured_frontend() -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
