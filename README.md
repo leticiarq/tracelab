@@ -4,7 +4,7 @@ Local-first AI-powered cybersecurity lab documentation tool. Organize findings, 
 
 ## Status
 
-TraceLab provides a FastAPI backend with persistent management of platforms, categories, and labs, plus a responsive React dashboard for the complete laboratory workflow. Evidence upload, report generation, and Ollama integration are not implemented yet.
+TraceLab provides a FastAPI backend with persistent management of platforms, categories, labs, evidence and Markdown reports, plus an optional local Ollama integration and a responsive React interface.
 
 ## Requirements
 
@@ -14,7 +14,7 @@ TraceLab provides a FastAPI backend with persistent management of platforms, cat
 - Node.js 20.19+
 - npm 10+
 
-No cloud service, paid API, API key, or AI model is required for this setup.
+No cloud service, paid API, API key, or AI model is required for the core application. Ollama is optional and the rest of TraceLab remains usable when it is absent or disabled.
 
 ## Project structure
 
@@ -66,6 +66,12 @@ Expected response:
 
 Interactive OpenAPI documentation is available at `http://127.0.0.1:8000/docs`. The lab management resources are exposed under `/api/platforms`, `/api/categories`, and `/api/labs`.
 
+## Local AI with Ollama
+
+The optional AI integration uses only the local Ollama API at `http://127.0.0.1:11434` by default. It does not initiate model downloads. Open **Configurações de IA** in the web interface to inspect the server, select an installed model, test the connection, test text generation, or disable AI.
+
+The default model name is `qwen3-vl:2b`, but it is configurable. Image requests are enabled only when Ollama explicitly reports the selected model's `vision` capability. See [docs/ollama.md](docs/ollama.md) for Ubuntu installation, model setup, configuration, API endpoints and troubleshooting.
+
 Run backend tests:
 
 ```bash
@@ -92,6 +98,7 @@ The web interface includes:
 - laboratory creation and editing, with inline platform and category creation;
 - detailed information, notes, evidence, and report tabs;
 - explicit note saving with unsaved-change feedback.
+- local AI settings with Ollama status, installed models and connection/generation tests.
 
 Run frontend tests:
 
@@ -109,7 +116,7 @@ npm run build
 
 ## Development scope
 
-The backend and frontend remain independently executable and communicate through the local HTTP API. Ollama and the planned `qwen3-vl:2b` model belong to a future milestone; this version neither downloads nor runs AI models. The evidence and report tabs intentionally contain prepared empty states for future work.
+The backend and frontend remain independently executable and communicate through the local HTTP API. The AI infrastructure is independent from evidence and report services; Smart Evidence and intelligent report generation are intentionally outside this milestone.
 
 ## License
 

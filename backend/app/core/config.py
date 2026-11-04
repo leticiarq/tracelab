@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     evidence_max_files_per_upload: int = 10
     evidence_max_files_per_lab: int = 100
     report_export_max_size: int = 50 * 1024 * 1024
+    ai_enabled: bool = True
+    ai_config_path: Path = PROJECT_ROOT / "backend" / "data" / "ai-settings.json"
+    ai_max_images: int = 4
+    ai_max_image_bytes: int = 10 * 1024 * 1024
+    ai_max_image_dimension: int = 1600
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen3-vl:2b"
+    ollama_timeout_seconds: float = 120.0
+    ollama_keep_alive: str = "5m"
 
 
 @lru_cache
