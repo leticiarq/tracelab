@@ -4,7 +4,7 @@ Local-first AI-powered cybersecurity lab documentation tool. Organize findings, 
 
 ## Status
 
-TraceLab currently provides a FastAPI backend with persistent management of platforms, categories, and labs, plus the initial React frontend shell. Evidence analysis, Markdown export, and Ollama integration are not implemented yet.
+TraceLab provides a FastAPI backend with persistent management of platforms, categories, and labs, plus a responsive React dashboard for the complete laboratory workflow. Evidence upload, report generation, and Ollama integration are not implemented yet.
 
 ## Requirements
 
@@ -83,7 +83,15 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. The frontend expects the backend at `http://127.0.0.1:8000` by default.
+Open `http://localhost:5173`. The frontend expects the backend at `http://127.0.0.1:8000` by default. Set `VITE_API_URL` to use a different API address.
+
+The web interface includes:
+
+- progress metrics and recent laboratories on the dashboard;
+- searchable, filterable, paginated laboratory management;
+- laboratory creation and editing, with inline platform and category creation;
+- detailed information, notes, evidence, and report tabs;
+- explicit note saving with unsaved-change feedback.
 
 Run frontend tests:
 
@@ -101,7 +109,7 @@ npm run build
 
 ## Development scope
 
-The backend and frontend remain independent. The current milestone is backend-only and adds SQLite persistence and Alembic migrations without changing the frontend. Ollama and the planned `qwen3-vl:2b` model belong to a future milestone; this version neither downloads nor runs AI models.
+The backend and frontend remain independently executable and communicate through the local HTTP API. Ollama and the planned `qwen3-vl:2b` model belong to a future milestone; this version neither downloads nor runs AI models. The evidence and report tabs intentionally contain prepared empty states for future work.
 
 ## License
 
