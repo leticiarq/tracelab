@@ -1,4 +1,4 @@
-import type { AIGeneration, AIModel, AISettings, AIStatus, Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report, SmartEvidenceAnalysis } from "./types";
+import type { AIGeneration, AIModel, AIReportAction, AIReportStyle, AIReportVersion, AISettings, AIStatus, Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report, SmartEvidenceAnalysis } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -137,6 +137,15 @@ export const api = {
   },
   exportReport(labId: number, evidenceIds: number[], sensitiveReviewed: boolean) {
     return requestBlob(`/api/labs/${labId}/report/export`, { method: "POST", body: JSON.stringify({ evidence_ids: evidenceIds, sensitive_reviewed: sensitiveReviewed }) });
+  },
+  listAIReportVersions(labId: number) {
+    return request<AIReportVersion[]>(`/api/labs/${labId}/report/ai/versions`);
+  },
+  generateAIReport(labId: number, action: AIReportAction, style: AIReportStyle, evidenceIds: number[]) {
+    return request<AIReportVersion>(`/api/labs/${labId}/report/ai/generate`, { method: "POST", body: JSON.stringify({ action, style, evidence_ids: evidenceIds }) });
+  },
+  reviewAIReport(labId: number, versionId: number, action: "accept" | "reject") {
+    return request<AIReportVersion>(`/api/labs/${labId}/report/ai/versions/${versionId}`, { method: "PATCH", body: JSON.stringify({ action }) });
   },
   getAISettings() {
     return request<AISettings>("/api/ai/settings");

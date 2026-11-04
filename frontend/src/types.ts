@@ -99,6 +99,25 @@ export interface Report {
   sensitive_warnings: string[];
 }
 
+export type AIReportAction = "improve_notes" | "explain_vulnerability" | "missing_information" | "generate_readme";
+export type AIReportStyle = "professional" | "github" | "study";
+export type AIReportStatus = "suggested" | "accepted" | "rejected";
+
+export interface AIReportVersion {
+  id: number;
+  lab_id: number;
+  action: AIReportAction;
+  style: AIReportStyle;
+  status: AIReportStatus;
+  model_name: string;
+  original_text: string;
+  suggested_text: string;
+  ambiguities: string[];
+  questions: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AICapabilities {
   text: boolean;
   images: boolean;
