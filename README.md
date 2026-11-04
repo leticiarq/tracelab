@@ -4,7 +4,7 @@ Local-first AI-powered cybersecurity lab documentation tool. Organize findings, 
 
 ## Status
 
-TraceLab is in its initial project setup phase. This version provides an independent FastAPI backend, a React frontend, local SQLite configuration, and basic automated tests. Lab management, evidence analysis, Markdown export, and Ollama integration are intentionally not implemented yet.
+TraceLab currently provides a FastAPI backend with persistent management of platforms, categories, and labs, plus the initial React frontend shell. Evidence analysis, Markdown export, and Ollama integration are not implemented yet.
 
 ## Requirements
 
@@ -39,7 +39,7 @@ Create a local environment file from the example:
 cp .env.example .env
 ```
 
-The defaults are suitable for local development. The SQLite database is stored in `backend/data/tracelab.db` when database access is introduced. Local `.env` files and database files are ignored by Git.
+The defaults are suitable for local development. The SQLite database is stored in `backend/data/tracelab.db`. Local `.env` files and database files are ignored by Git.
 
 ## Backend
 
@@ -48,6 +48,7 @@ Install dependencies and start the API:
 ```bash
 cd backend
 poetry install
+poetry run alembic upgrade head
 poetry run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -62,6 +63,8 @@ Expected response:
 ```json
 {"status":"ok"}
 ```
+
+Interactive OpenAPI documentation is available at `http://127.0.0.1:8000/docs`. The lab management resources are exposed under `/api/platforms`, `/api/categories`, and `/api/labs`.
 
 Run backend tests:
 
@@ -98,7 +101,7 @@ npm run build
 
 ## Development scope
 
-This setup deliberately keeps the backend and frontend independent and dependency-light. Ollama and the planned `qwen3-vl:2b` model belong to a future milestone; this version neither downloads nor runs AI models.
+The backend and frontend remain independent. The current milestone is backend-only and adds SQLite persistence and Alembic migrations without changing the frontend. Ollama and the planned `qwen3-vl:2b` model belong to a future milestone; this version neither downloads nor runs AI models.
 
 ## License
 

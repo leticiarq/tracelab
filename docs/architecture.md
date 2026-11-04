@@ -9,9 +9,13 @@ The initial architecture favors local execution, explicit boundaries, and a smal
 - `app/api/routes`: HTTP endpoints grouped by responsibility.
 - `app/core`: environment-backed application configuration.
 - `app/db`: SQLAlchemy base, engine, and session factory for SQLite.
+- `app/models`: persistent platform, category, and lab entities.
+- `app/schemas`: Pydantic request, response, and pagination contracts.
+- `app/services`: CRUD rules, relation validation, filtering, and collision-safe slugs.
+- `alembic`: versioned database schema migrations.
 - `tests`: API tests using pytest and FastAPI's test client.
 
-FastAPI exposes only `GET /health` in this milestone. SQLAlchemy is configured but no domain models or migrations are introduced before they are needed.
+FastAPI exposes `GET /health` and CRUD collections under `/api/platforms`, `/api/categories`, and `/api/labs`. Lab IDs are database-generated and remain stable when a title changes. Human-readable slugs are normalized and receive numeric suffixes on collisions.
 
 ## Frontend
 
@@ -24,7 +28,7 @@ No router or state-management library is included because the current single-scr
 
 ## Local data and AI
 
-SQLite is the planned persistence mechanism, with the database kept under `backend/data` and excluded from version control. Ollama with `qwen3-vl:2b` is planned for a future milestone and is not integrated or downloaded in this setup.
+SQLite is the persistence mechanism, with the database kept under `backend/data` and excluded from version control. Alembic owns schema creation and upgrades. Tests override the application session with a separate temporary SQLite database. Ollama with `qwen3-vl:2b` is planned for a future milestone and is not integrated or downloaded in this setup.
 
 ## Security baseline
 
