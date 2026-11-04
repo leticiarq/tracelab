@@ -30,6 +30,7 @@ export interface Lab {
   impact: string | null;
   mitigation: string | null;
   learnings: string | null;
+  resolution_steps: string | null;
   created_at: string;
   updated_at: string;
   solved_at: string | null;
@@ -64,6 +65,17 @@ export interface Evidence {
   step_label: string | null;
   display_order: number;
   created_at: string;
+}
+
+export interface Report {
+  id: number;
+  lab_id: number;
+  markdown: string;
+  revision: number;
+  generated_at: string;
+  updated_at: string;
+  incomplete_fields: string[];
+  sensitive_warnings: string[];
 }
 
 export const STATUS_LABELS: Record<LabStatus, string> = {

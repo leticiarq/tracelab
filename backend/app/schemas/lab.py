@@ -20,6 +20,7 @@ class LabBase(BaseModel):
     impact: str | None = Field(default=None, max_length=100_000)
     mitigation: str | None = Field(default=None, max_length=100_000)
     learnings: str | None = Field(default=None, max_length=100_000)
+    resolution_steps: str | None = Field(default=None, max_length=100_000)
 
     model_config = ConfigDict(str_strip_whitespace=True)
     _validate_source_url = field_validator("source_url", mode="before")(validate_http_url)
@@ -42,6 +43,7 @@ class LabUpdate(BaseModel):
     impact: str | None = Field(default=None, max_length=100_000)
     mitigation: str | None = Field(default=None, max_length=100_000)
     learnings: str | None = Field(default=None, max_length=100_000)
+    resolution_steps: str | None = Field(default=None, max_length=100_000)
 
     model_config = ConfigDict(str_strip_whitespace=True)
     _validate_source_url = field_validator("source_url", mode="before")(validate_http_url)

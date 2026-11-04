@@ -2,11 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import type { Evidence, Lab } from "./types";
+import type { Evidence, Lab, Report } from "./types";
+import { SafeMarkdown } from "./pages/ReportTab";
 
 const platform = { id: 1, name: "Hack The Box", slug: "hack-the-box", website_url: "https://hackthebox.com", created_at: "2026-11-01T12:00:00Z" };
 const category = { id: 1, name: "Web", slug: "web", platform_id: 1 };
-const baseLab: Lab = { id: 1, title: "Cache Poisoning", slug: "cache-poisoning", platform_id: 1, category_id: 1, source_url: "https://example.com/lab", difficulty: "médio", status: "in_progress", notes: "GET / HTTP/1.1\nHost: target.local", objective: null, vulnerability_description: null, impact: null, mitigation: null, learnings: null, created_at: "2026-11-02T12:00:00Z", updated_at: "2026-11-03T12:00:00Z", solved_at: null };
+const baseLab: Lab = { id: 1, title: "Cache Poisoning", slug: "cache-poisoning", platform_id: 1, category_id: 1, source_url: "https://example.com/lab", difficulty: "médio", status: "in_progress", notes: "GET / HTTP/1.1\nHost: target.local", objective: null, vulnerability_description: null, impact: null, mitigation: null, learnings: null, resolution_steps: null, created_at: "2026-11-02T12:00:00Z", updated_at: "2026-11-03T12:00:00Z", solved_at: null };
 
 function page<T>(items: T[]) { return { items, total: items.length, page: 1, page_size: 100, pages: items.length ? 1 : 0 }; }
 function json(body: unknown, status = 200) { return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } })); }
@@ -14,6 +15,7 @@ function json(body: unknown, status = 200) { return Promise.resolve(new Response
 function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
   const labs = initialLabs.map((lab) => ({ ...lab }));
   const evidences: Evidence[] = [];
+  let report: Report | null = null;
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     const method = init?.method || "GET";
@@ -36,6 +38,19 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
       const payload = JSON.parse(String(init?.body));
       const lab = { ...baseLab, ...payload, id: labs.length + 1, slug: payload.title.toLowerCase().replaceAll(" ", "-"), notes: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       labs.unshift(lab); return json(lab, 201);
+    }
+    const reportRoute = url.pathname.match(/^\/api\/labs\/(\d+)\/report$/);
+    if (reportRoute) {
+      const labId = Number(reportRoute[1]);
+      if (method === "GET") return json(report);
+      if (method === "PUT") { const markdown = JSON.parse(String(init?.body)).markdown; report = { ...(report as Report), markdown, revision: (report?.revision || 0) + 1, updated_at: new Date().toISOString() }; return json(report); }
+    }
+    const generateRoute = url.pathname.match(/^\/api\/labs\/(\d+)\/report\/generate$/);
+    if (generateRoute && method === "POST") {
+      const labId = Number(generateRoute[1]); const lab = labs.find((item) => item.id === labId)!;
+      const markdown = `# ${lab.title}\n\n## 1. Informações gerais\n\n- Plataforma: Hack The Box\n\n${lab.objective ? `## 2. Objetivo\n\n${lab.objective}\n\n` : ""}## 4. Metodologia e resolução\n\n${lab.notes}\n`;
+      report = { id: 1, lab_id: labId, markdown, revision: 1, generated_at: new Date().toISOString(), updated_at: new Date().toISOString(), incomplete_fields: [], sensitive_warnings: [] };
+      return json(report);
     }
     const evidenceCollection = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences$/);
     if (evidenceCollection) {
@@ -71,7 +86,7 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
     return json({ detail: "Not found" }, 404);
   });
   vi.stubGlobal("fetch", fetchMock);
-  return { labs, evidences, fetchMock };
+  return { labs, evidences, fetchMock, get report() { return report; } };
 }
 
 beforeEach(() => { window.history.replaceState({}, "", "/"); vi.stubGlobal("scrollTo", vi.fn()); });
@@ -155,6 +170,30 @@ describe("TraceLab", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "Evidências" }));
     expect(await screen.findByText("Tela de autenticação")).toBeInTheDocument();
     expect(screen.getByText("3", { selector: ".evidence-heading span" })).toBeInTheDocument();
+  });
+
+  it("gera, edita e persiste o Markdown separadamente das anotações", async () => {
+    const mock = installApi(); window.history.replaceState({}, "", "/labs/1"); render(<App />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Relatório" }));
+    expect(await screen.findByText(/Campos incompletos/)).toHaveTextContent("Objetivo");
+    fireEvent.change(screen.getByLabelText("Objetivo"), { target: { value: "Documentar o ataque" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gerar Markdown" }));
+    expect(await screen.findByRole("heading", { name: "Cache Poisoning" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Código" }));
+    const editor = screen.getByLabelText("Editor Markdown");
+    fireEvent.change(editor, { target: { value: `${(editor as HTMLTextAreaElement).value}\nEdição manual` } });
+    expect(screen.getByText("Alterações não salvas")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(mock.report?.markdown).toContain("Edição manual"));
+    expect(mock.labs[0].notes).toBe(baseLab.notes);
+  });
+
+  it("renderiza Markdown sem executar HTML ou imagens externas", () => {
+    const view = render(<SafeMarkdown markdown={'# Seguro\n\n<script>alert("x")</script>\n\n![externa](https://evil.invalid/x.png)'} imageMap={new Map()} />);
+    expect(screen.getByRole("heading", { name: "Seguro" })).toBeInTheDocument();
+    expect(screen.getByText(/<script>alert/)).toBeInTheDocument();
+    expect(view.container.querySelector("script")).toBeNull();
+    expect(view.container.querySelector("img")).toBeNull();
   });
 
   it("apresenta estado de erro da API com opção de tentar novamente", async () => {

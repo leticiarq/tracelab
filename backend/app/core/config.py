@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     evidence_max_file_size: int = 10 * 1024 * 1024
     evidence_max_files_per_upload: int = 10
     evidence_max_files_per_lab: int = 100
+    report_export_max_size: int = 50 * 1024 * 1024
 
 
 @lru_cache
