@@ -40,6 +40,7 @@ class Lab(Base):
     impact: Mapped[str | None] = mapped_column(Text)
     mitigation: Mapped[str | None] = mapped_column(Text)
     learnings: Mapped[str | None] = mapped_column(Text)
+    resolution_steps: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -51,5 +52,8 @@ class Lab(Base):
     platform: Mapped["Platform"] = relationship(back_populates="labs")  # noqa: F821
     category: Mapped["Category | None"] = relationship(back_populates="labs")  # noqa: F821
     evidences: Mapped[list["Evidence"]] = relationship(  # noqa: F821
+        back_populates="lab", cascade="all, delete-orphan", passive_deletes=True
+    )
+    report: Mapped["Report | None"] = relationship(  # noqa: F821
         back_populates="lab", cascade="all, delete-orphan", passive_deletes=True
     )

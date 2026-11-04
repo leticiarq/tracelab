@@ -8,6 +8,7 @@ from app.api.routes.evidences import router as evidences_router
 from app.api.routes.health import router as health_router
 from app.api.routes.labs import router as labs_router
 from app.api.routes.platforms import router as platforms_router
+from app.api.routes.reports import router as reports_router
 from app.core.config import settings
 from app.services.errors import ServiceError
 
@@ -21,7 +22,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=[str(origin) for origin in settings.cors_origins],
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["*"],
     )
     application.add_exception_handler(ServiceError, service_error_handler)
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     application.include_router(categories_router)
     application.include_router(labs_router)
     application.include_router(evidences_router)
+    application.include_router(reports_router)
     return application
 
 

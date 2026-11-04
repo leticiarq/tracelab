@@ -1,4 +1,4 @@
-import type { Category, Evidence, Lab, LabInput, LabStatus, Page, Platform } from "./types";
+import type { Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -39,6 +39,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function requestBlob(path: string, init: RequestInit): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...init.headers },
+  });
+  if (!response.ok) {
+    let message = "Não foi possível exportar o relatório.";
+    try { const body = await response.json() as { detail?: string }; if (body.detail) message = body.detail; } catch { /* safe fallback */ }
+    throw new ApiError(message, response.status);
+  }
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] || "tracelab-report.zip";
+  return { blob: await response.blob(), filename };
+}
+
 function queryString(params: Record<string, string | number | undefined | null>) {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -65,7 +80,7 @@ export const api = {
   createLab(data: LabInput) {
     return request<Lab>("/api/labs", { method: "POST", body: JSON.stringify(data) });
   },
-  updateLab(id: number, data: Partial<LabInput> & { notes?: string }) {
+  updateLab(id: number, data: Partial<LabInput & Pick<Lab, "notes" | "objective" | "vulnerability_description" | "impact" | "mitigation" | "learnings" | "resolution_steps">>) {
     return request<Lab>(`/api/labs/${id}`, { method: "PATCH", body: JSON.stringify(data) });
   },
   deleteLab(id: number) {
@@ -101,6 +116,18 @@ export const api = {
   },
   deleteEvidence(labId: number, evidenceId: number) {
     return request<void>(`/api/labs/${labId}/evidences/${evidenceId}`, { method: "DELETE" });
+  },
+  getReport(labId: number) {
+    return request<Report | null>(`/api/labs/${labId}/report`);
+  },
+  generateReport(labId: number, confirmOverwrite = false) {
+    return request<Report>(`/api/labs/${labId}/report/generate`, { method: "POST", body: JSON.stringify({ confirm_overwrite: confirmOverwrite }) });
+  },
+  saveReport(labId: number, markdown: string) {
+    return request<Report>(`/api/labs/${labId}/report`, { method: "PUT", body: JSON.stringify({ markdown }) });
+  },
+  exportReport(labId: number, evidenceIds: number[], sensitiveReviewed: boolean) {
+    return requestBlob(`/api/labs/${labId}/report/export`, { method: "POST", body: JSON.stringify({ evidence_ids: evidenceIds, sensitive_reviewed: sensitiveReviewed }) });
   },
 };
 

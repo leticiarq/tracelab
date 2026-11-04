@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Navigate } from "../App";
 import { api } from "../api";
-import { Button, EmptyState, ErrorState, Icons, LoadingState, StatusBadge, Toast } from "../components";
+import { Button, ErrorState, Icons, LoadingState, StatusBadge, Toast } from "../components";
 import type { Category, Lab, Platform } from "../types";
 import { EvidenceTab } from "./EvidenceTab";
+import { ReportTab } from "./ReportTab";
 
 type Tab = "info" | "notes" | "evidence" | "report";
 
@@ -70,7 +71,7 @@ export function LabDetailsPage({ navigate, labId }: { navigate: Navigate; labId:
         </section>
       )}
       {tab === "evidence" && <EvidenceTab labId={lab.id} notify={(message) => { setToast(message); window.setTimeout(() => setToast(""), 3500); }} />}
-      {tab === "report" && <section className="panel" role="tabpanel"><EmptyState icon={<Icons.note className="h-7 w-7" />} title="Relatório em breve" description="A composição do relatório será implementada em uma próxima etapa." /></section>}
+      {tab === "report" && <ReportTab lab={lab} onLabChange={setLab} notify={(message) => { setToast(message); window.setTimeout(() => setToast(""), 3500); }} />}
       {toast && <Toast message={toast} />}
     </div>
   );
