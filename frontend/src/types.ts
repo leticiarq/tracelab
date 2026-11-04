@@ -52,6 +52,20 @@ export interface LabInput {
   status: LabStatus;
 }
 
+export interface Evidence {
+  id: number;
+  lab_id: number;
+  original_filename: string;
+  stored_filename: string;
+  mime_type: string;
+  file_size: number;
+  sha256: string;
+  description: string;
+  step_label: string | null;
+  display_order: number;
+  created_at: string;
+}
+
 export const STATUS_LABELS: Record<LabStatus, string> = {
   todo: "Não iniciado",
   in_progress: "Em andamento",

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import type { Lab } from "./types";
+import type { Evidence, Lab } from "./types";
 
 const platform = { id: 1, name: "Hack The Box", slug: "hack-the-box", website_url: "https://hackthebox.com", created_at: "2026-11-01T12:00:00Z" };
 const category = { id: 1, name: "Web", slug: "web", platform_id: 1 };
@@ -13,6 +13,7 @@ function json(body: unknown, status = 200) { return Promise.resolve(new Response
 
 function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
   const labs = initialLabs.map((lab) => ({ ...lab }));
+  const evidences: Evidence[] = [];
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     const method = init?.method || "GET";
@@ -36,6 +37,29 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
       const lab = { ...baseLab, ...payload, id: labs.length + 1, slug: payload.title.toLowerCase().replaceAll(" ", "-"), notes: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       labs.unshift(lab); return json(lab, 201);
     }
+    const evidenceCollection = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences$/);
+    if (evidenceCollection) {
+      const labId = Number(evidenceCollection[1]);
+      if (method === "GET") return json(evidences.filter((item) => item.lab_id === labId).sort((a, b) => a.display_order - b.display_order));
+      if (method === "POST") {
+        const files = Array.from((init?.body as FormData).getAll("files")) as File[];
+        const created = files.map((file, index): Evidence => ({ id: evidences.length + index + 1, lab_id: labId, original_filename: file.name, stored_filename: `${crypto.randomUUID()}.png`, mime_type: file.type || "image/png", file_size: file.size, sha256: "a".repeat(64), description: file.name.replace(/\.[^.]+$/, ""), step_label: null, display_order: evidences.length + index, created_at: new Date().toISOString() }));
+        evidences.push(...created); return json(created, 201);
+      }
+    }
+    const evidenceOrder = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences\/order$/);
+    if (evidenceOrder && method === "PATCH") {
+      const ids = JSON.parse(String(init?.body)).evidence_ids as number[];
+      ids.forEach((id, displayOrder) => { const item = evidences.find((evidence) => evidence.id === id); if (item) item.display_order = displayOrder; });
+      return json(ids.map((id) => evidences.find((item) => item.id === id)));
+    }
+    const evidenceItem = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences\/(\d+)$/);
+    if (evidenceItem) {
+      const id = Number(evidenceItem[2]); const index = evidences.findIndex((item) => item.id === id);
+      if (index < 0) return json({ detail: "Evidence not found" }, 404);
+      if (method === "PATCH") { evidences[index] = { ...evidences[index], ...JSON.parse(String(init?.body)) }; return json(evidences[index]); }
+      if (method === "DELETE") { evidences.splice(index, 1); evidences.forEach((item, order) => { item.display_order = order; }); return Promise.resolve(new Response(null, { status: 204 })); }
+    }
     const match = url.pathname.match(/^\/api\/labs\/(\d+)$/);
     if (match) {
       const id = Number(match[1]); const index = labs.findIndex((lab) => lab.id === id);
@@ -47,7 +71,7 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
     return json({ detail: "Not found" }, 404);
   });
   vi.stubGlobal("fetch", fetchMock);
-  return { labs, fetchMock };
+  return { labs, evidences, fetchMock };
 }
 
 beforeEach(() => { window.history.replaceState({}, "", "/"); vi.stubGlobal("scrollTo", vi.fn()); });
@@ -109,6 +133,28 @@ describe("TraceLab", () => {
     view.unmount(); render(<App />);
     fireEvent.click(await screen.findByRole("tab", { name: "Anotações" }));
     expect(screen.getByLabelText("Anotações do laboratório")).toHaveValue(content);
+  });
+
+  it("envia, descreve, associa, reordena e recupera três screenshots", async () => {
+    const mock = installApi(); window.history.replaceState({}, "", "/labs/1"); const view = render(<App />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Evidências" }));
+    const files = ["login.png", "exploit.png", "proof.png"].map((name) => new File([name], name, { type: "image/png" }));
+    fireEvent.change(await screen.findByLabelText("Selecionar evidências"), { target: { files } });
+    expect(await screen.findByText("3 evidências enviadas com sucesso.")).toBeInTheDocument();
+    expect(mock.evidences).toHaveLength(3);
+
+    fireEvent.change(screen.getByLabelText("Nome descritivo / legenda"), { target: { value: "Tela de autenticação" } });
+    fireEvent.change(screen.getByLabelText("Etapa do laboratório"), { target: { value: "01 · Reconhecimento" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(mock.evidences[0].description).toBe("Tela de autenticação"));
+    expect(mock.evidences[0].step_label).toBe("01 · Reconhecimento");
+
+    fireEvent.click(screen.getByRole("button", { name: "Mover evidência para baixo" }));
+    await waitFor(() => expect(mock.evidences.find((item) => item.description === "Tela de autenticação")?.display_order).toBe(1));
+    view.unmount(); render(<App />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Evidências" }));
+    expect(await screen.findByText("Tela de autenticação")).toBeInTheDocument();
+    expect(screen.getByText("3", { selector: ".evidence-heading span" })).toBeInTheDocument();
   });
 
   it("apresenta estado de erro da API com opção de tentar novamente", async () => {

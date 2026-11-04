@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes.categories import router as categories_router
+from app.api.routes.evidences import router as evidences_router
 from app.api.routes.health import router as health_router
 from app.api.routes.labs import router as labs_router
 from app.api.routes.platforms import router as platforms_router
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     application.include_router(platforms_router)
     application.include_router(categories_router)
     application.include_router(labs_router)
+    application.include_router(evidences_router)
     return application
 
 
