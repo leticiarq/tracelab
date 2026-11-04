@@ -1,4 +1,4 @@
-import type { Category, Lab, LabInput, LabStatus, Page, Platform } from "./types";
+import type { Category, Evidence, Lab, LabInput, LabStatus, Page, Platform } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -17,7 +17,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...init,
-      headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
+      headers: init?.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
     });
   } catch {
     throw new ApiError("Não foi possível conectar à API. Verifique se o backend está em execução.", 0);
@@ -85,7 +85,32 @@ export const api = {
   createCategory(data: { name: string; platform_id: number | null }) {
     return request<Category>("/api/categories", { method: "POST", body: JSON.stringify(data) });
   },
+  listEvidences(labId: number) {
+    return request<Evidence[]>(`/api/labs/${labId}/evidences`);
+  },
+  uploadEvidences(labId: number, files: File[]) {
+    const body = new FormData();
+    files.forEach((file) => body.append("files", file));
+    return request<Evidence[]>(`/api/labs/${labId}/evidences`, { method: "POST", body });
+  },
+  updateEvidence(labId: number, evidenceId: number, data: { description?: string; step_label?: string | null }) {
+    return request<Evidence>(`/api/labs/${labId}/evidences/${evidenceId}`, { method: "PATCH", body: JSON.stringify(data) });
+  },
+  reorderEvidences(labId: number, evidenceIds: number[]) {
+    return request<Evidence[]>(`/api/labs/${labId}/evidences/order`, { method: "PATCH", body: JSON.stringify({ evidence_ids: evidenceIds }) });
+  },
+  deleteEvidence(labId: number, evidenceId: number) {
+    return request<void>(`/api/labs/${labId}/evidences/${evidenceId}`, { method: "DELETE" });
+  },
 };
+
+export function evidenceContentUrl(labId: number, evidenceId: number) {
+  return `${API_URL}/api/labs/${labId}/evidences/${evidenceId}/content`;
+}
+
+export function evidenceDownloadUrl(labId: number, evidenceId: number) {
+  return `${API_URL}/api/labs/${labId}/evidences/${evidenceId}/download`;
+}
 
 export async function listAllLabs(): Promise<Lab[]> {
   const first = await api.listLabs({ page: 1, page_size: 100 });

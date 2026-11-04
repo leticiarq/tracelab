@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 import app.models  # noqa: F401
+from app.core.config import settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -48,3 +49,13 @@ async def client(test_session_factory: sessionmaker[Session]) -> AsyncGenerator[
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def isolated_evidence_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    storage = tmp_path / "private-evidences"
+    monkeypatch.setattr(settings, "evidence_storage_path", storage)
+    monkeypatch.setattr(settings, "evidence_max_file_size", 1024)
+    monkeypatch.setattr(settings, "evidence_max_files_per_upload", 3)
+    monkeypatch.setattr(settings, "evidence_max_files_per_lab", 5)
+    return storage

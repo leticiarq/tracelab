@@ -4,6 +4,7 @@ import type { Navigate } from "../App";
 import { api } from "../api";
 import { Button, EmptyState, ErrorState, Icons, LoadingState, StatusBadge, Toast } from "../components";
 import type { Category, Lab, Platform } from "../types";
+import { EvidenceTab } from "./EvidenceTab";
 
 type Tab = "info" | "notes" | "evidence" | "report";
 
@@ -68,7 +69,7 @@ export function LabDetailsPage({ navigate, labId }: { navigate: Navigate; labId:
           <div className="notes-footer"><span>{notes.length.toLocaleString("pt-BR")} caracteres</span><Button onClick={() => void saveNotes()} disabled={!dirty || saving}>{saving ? "Salvando…" : "Salvar anotações"}</Button></div>
         </section>
       )}
-      {tab === "evidence" && <section className="panel" role="tabpanel"><EmptyState icon={<Icons.note className="h-7 w-7" />} title="Evidências em breve" description="O upload e a organização de evidências serão adicionados em uma próxima etapa." /></section>}
+      {tab === "evidence" && <EvidenceTab labId={lab.id} notify={(message) => { setToast(message); window.setTimeout(() => setToast(""), 3500); }} />}
       {tab === "report" && <section className="panel" role="tabpanel"><EmptyState icon={<Icons.note className="h-7 w-7" />} title="Relatório em breve" description="A composição do relatório será implementada em uma próxima etapa." /></section>}
       {toast && <Toast message={toast} />}
     </div>

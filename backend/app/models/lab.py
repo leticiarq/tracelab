@@ -50,3 +50,6 @@ class Lab(Base):
 
     platform: Mapped["Platform"] = relationship(back_populates="labs")  # noqa: F821
     category: Mapped["Category | None"] = relationship(back_populates="labs")  # noqa: F821
+    evidences: Mapped[list["Evidence"]] = relationship(  # noqa: F821
+        back_populates="lab", cascade="all, delete-orphan", passive_deletes=True
+    )

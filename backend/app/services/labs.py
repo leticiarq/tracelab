@@ -100,5 +100,10 @@ def update_lab(db: Session, lab_id: int, data: LabUpdate) -> Lab:
 
 def delete_lab(db: Session, lab_id: int) -> None:
     lab = get_lab(db, lab_id)
+    from app.services.evidences import lab_evidence_paths
+
+    evidence_paths = lab_evidence_paths(db, lab_id)
     db.delete(lab)
     db.commit()
+    for path in evidence_paths:
+        path.unlink(missing_ok=True)
