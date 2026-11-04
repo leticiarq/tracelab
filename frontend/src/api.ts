@@ -1,4 +1,4 @@
-import type { AIGeneration, AIModel, AISettings, AIStatus, Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report } from "./types";
+import type { AIGeneration, AIModel, AISettings, AIStatus, Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report, SmartEvidenceAnalysis } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -116,6 +116,15 @@ export const api = {
   },
   deleteEvidence(labId: number, evidenceId: number) {
     return request<void>(`/api/labs/${labId}/evidences/${evidenceId}`, { method: "DELETE" });
+  },
+  getEvidenceAnalysis(labId: number, evidenceId: number) {
+    return request<SmartEvidenceAnalysis | null>(`/api/labs/${labId}/evidences/${evidenceId}/analysis`);
+  },
+  analyzeEvidence(labId: number, evidenceId: number, force = false) {
+    return request<SmartEvidenceAnalysis>(`/api/labs/${labId}/evidences/${evidenceId}/analysis${force ? "?force=true" : ""}`, { method: "POST" });
+  },
+  reviewEvidenceAnalysis(labId: number, evidenceId: number, data: Partial<Pick<SmartEvidenceAnalysis, "detected_tool" | "visible_observations" | "objective_explanation" | "suggested_step" | "suggested_caption" | "possible_sensitive_data" | "uncertainties">> & { action: "edit" | "accept" | "reject" }) {
+    return request<SmartEvidenceAnalysis>(`/api/labs/${labId}/evidences/${evidenceId}/analysis`, { method: "PATCH", body: JSON.stringify(data) });
   },
   getReport(labId: number) {
     return request<Report | null>(`/api/labs/${labId}/report`);

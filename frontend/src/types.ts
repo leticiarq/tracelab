@@ -67,6 +67,27 @@ export interface Evidence {
   created_at: string;
 }
 
+export type SmartEvidenceStatus = "suggested" | "accepted" | "rejected";
+
+export interface SmartEvidenceAnalysis {
+  id: number;
+  evidence_id: number;
+  image_sha256: string;
+  model_name: string;
+  instruction_version: string;
+  detected_tool: string | null;
+  visible_observations: string[];
+  objective_explanation: string;
+  suggested_step: string | null;
+  suggested_caption: string;
+  possible_sensitive_data: string[];
+  uncertainties: string[];
+  status: SmartEvidenceStatus;
+  created_at: string;
+  updated_at: string;
+  cached: boolean;
+}
+
 export interface Report {
   id: number;
   lab_id: number;

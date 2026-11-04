@@ -30,3 +30,6 @@ class Evidence(Base):
     )
 
     lab: Mapped["Lab"] = relationship(back_populates="evidences")  # noqa: F821
+    smart_analysis: Mapped["SmartEvidenceAnalysis | None"] = relationship(  # noqa: F821
+        back_populates="evidence", cascade="all, delete-orphan", passive_deletes=True
+    )

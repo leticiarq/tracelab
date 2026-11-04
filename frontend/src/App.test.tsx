@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import type { Evidence, Lab, Report } from "./types";
+import type { Evidence, Lab, Report, SmartEvidenceAnalysis } from "./types";
 import { SafeMarkdown } from "./pages/ReportTab";
 
 const platform = { id: 1, name: "Hack The Box", slug: "hack-the-box", website_url: "https://hackthebox.com", created_at: "2026-11-01T12:00:00Z" };
@@ -16,6 +16,7 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
   const labs = initialLabs.map((lab) => ({ ...lab }));
   const evidences: Evidence[] = [];
   let report: Report | null = null;
+  const analyses = new Map<number, SmartEvidenceAnalysis>();
   let aiSettings = { enabled: true, model: "qwen3-vl:2b", timeout_seconds: 120, keep_alive: "5m", base_url: "http://127.0.0.1:11434" };
   const aiStatus = () => ({ enabled: aiSettings.enabled, available: aiSettings.enabled, version: aiSettings.enabled ? "0.12.0" : null, selected_model: aiSettings.model, selected_model_installed: aiSettings.enabled, capabilities: aiSettings.enabled ? { text: true, images: true, declared: ["completion", "vision"] } : null, error: aiSettings.enabled ? null : "A IA está desativada." });
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -75,6 +76,24 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
       const ids = JSON.parse(String(init?.body)).evidence_ids as number[];
       ids.forEach((id, displayOrder) => { const item = evidences.find((evidence) => evidence.id === id); if (item) item.display_order = displayOrder; });
       return json(ids.map((id) => evidences.find((item) => item.id === id)));
+    }
+    const analysisRoute = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences\/(\d+)\/analysis$/);
+    if (analysisRoute) {
+      const id = Number(analysisRoute[2]);
+      if (method === "GET") return json(analyses.get(id) ?? null);
+      if (method === "POST") {
+        const now = new Date().toISOString();
+        const analysis: SmartEvidenceAnalysis = { id, evidence_id: id, image_sha256: "a".repeat(64), model_name: aiSettings.model, instruction_version: "smart-evidence-v1", detected_tool: "Burp Suite Repeater", visible_observations: ["Resposta HTTP 200 visível"], objective_explanation: "Observação: resposta 200. Inferência: a requisição foi repetida.", suggested_step: "02 · Validação", suggested_caption: "Resposta HTTP no Repeater", possible_sensitive_data: ["Possível cookie"], uncertainties: [], status: "suggested", created_at: now, updated_at: now, cached: false };
+        analyses.set(id, analysis); return json(analysis);
+      }
+      if (method === "PATCH") {
+        const payload = JSON.parse(String(init?.body)); const current = analyses.get(id)!;
+        const updated = { ...current, ...payload, status: payload.action === "accept" ? "accepted" : payload.action === "reject" ? "rejected" : "suggested", updated_at: new Date().toISOString() } as SmartEvidenceAnalysis;
+        delete (updated as SmartEvidenceAnalysis & { action?: string }).action;
+        analyses.set(id, updated);
+        if (payload.action === "accept") { const evidence = evidences.find((item) => item.id === id)!; evidence.description = updated.suggested_caption; evidence.step_label = updated.suggested_step; }
+        return json(updated);
+      }
     }
     const evidenceItem = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences\/(\d+)$/);
     if (evidenceItem) {
@@ -178,6 +197,25 @@ describe("TraceLab", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "Evidências" }));
     expect(await screen.findByText("Tela de autenticação")).toBeInTheDocument();
     expect(screen.getByText("3", { selector: ".evidence-heading span" })).toBeInTheDocument();
+  });
+
+  it("analisa, permite revisar a legenda e aceita Smart Evidence", async () => {
+    const mock = installApi(); window.history.replaceState({}, "", "/labs/1"); render(<App />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Evidências" }));
+    fireEvent.change(await screen.findByLabelText("Selecionar evidências"), { target: { files: [new File(["shot"], "repeater.png", { type: "image/png" })] } });
+    await screen.findByText("1 evidência enviada com sucesso.");
+    fireEvent.click(await screen.findByRole("button", { name: "Analisar com IA" }));
+    expect(await screen.findByDisplayValue("Resposta HTTP no Repeater")).toBeDisabled();
+    expect(screen.getByDisplayValue("Possível cookie")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Editar análise" }));
+    fireEvent.change(screen.getByLabelText("Legenda sugerida"), { target: { value: "Resposta 200 confirmada visualmente" } });
+    fireEvent.change(screen.getByLabelText("Etapa sugerida"), { target: { value: "02 · Revisão manual" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar análise" }));
+    await screen.findByText("Análise editada e salva para revisão.");
+    fireEvent.click(screen.getByRole("button", { name: "Aceitar" }));
+    await screen.findByText("Análise aceita; legenda e etapa estão disponíveis para o README.");
+    await waitFor(() => expect(mock.evidences[0].description).toBe("Resposta 200 confirmada visualmente"));
+    expect(mock.evidences[0].step_label).toBe("02 · Revisão manual");
   });
 
   it("gera, edita e persiste o Markdown separadamente das anotações", async () => {
