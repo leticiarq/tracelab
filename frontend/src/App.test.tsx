@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import type { Evidence, Lab, Report, SmartEvidenceAnalysis } from "./types";
+import type { AIReportVersion, Evidence, Lab, Report, SmartEvidenceAnalysis } from "./types";
 import { SafeMarkdown } from "./pages/ReportTab";
 
 const platform = { id: 1, name: "Hack The Box", slug: "hack-the-box", website_url: "https://hackthebox.com", created_at: "2026-11-01T12:00:00Z" };
@@ -16,6 +16,7 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
   const labs = initialLabs.map((lab) => ({ ...lab }));
   const evidences: Evidence[] = [];
   let report: Report | null = null;
+  const aiReportVersions: AIReportVersion[] = [];
   const analyses = new Map<number, SmartEvidenceAnalysis>();
   let aiSettings = { enabled: true, model: "qwen3-vl:2b", timeout_seconds: 120, keep_alive: "5m", base_url: "http://127.0.0.1:11434" };
   const aiStatus = () => ({ enabled: aiSettings.enabled, available: aiSettings.enabled, version: aiSettings.enabled ? "0.12.0" : null, selected_model: aiSettings.model, selected_model_installed: aiSettings.enabled, capabilities: aiSettings.enabled ? { text: true, images: true, declared: ["completion", "vision"] } : null, error: aiSettings.enabled ? null : "A IA está desativada." });
@@ -28,6 +29,7 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
     if (url.pathname === "/api/ai/models" && method === "GET") return json([{ name: "qwen3-vl:2b", size: 1_900_000_000, modified_at: null, capabilities: { text: true, images: true, declared: ["completion", "vision"] } }]);
     if (url.pathname === "/api/ai/test-connection" && method === "POST") return json(aiStatus());
     if (url.pathname === "/api/ai/test-generation" && method === "POST") return json({ model: aiSettings.model, text: "Geração local funcionando.", done: true });
+    if (url.pathname === "/api/ai/operations/current" && method === "DELETE") return json({ cancelled: true });
     if (url.pathname === "/api/platforms" && method === "GET") return json(page([platform]));
     if (url.pathname === "/api/categories" && method === "GET") return json(page([category]));
     if (url.pathname === "/api/labs" && method === "GET") {
@@ -47,6 +49,19 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
       const payload = JSON.parse(String(init?.body));
       const lab = { ...baseLab, ...payload, id: labs.length + 1, slug: payload.title.toLowerCase().replaceAll(" ", "-"), notes: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       labs.unshift(lab); return json(lab, 201);
+    }
+    const aiReportCollection = url.pathname.match(/^\/api\/labs\/(\d+)\/report\/ai\/versions$/);
+    if (aiReportCollection && method === "GET") return json(aiReportVersions);
+    const aiReportGenerate = url.pathname.match(/^\/api\/labs\/(\d+)\/report\/ai\/generate$/);
+    if (aiReportGenerate && method === "POST") {
+      const payload = JSON.parse(String(init?.body)); const now = new Date().toISOString();
+      const version: AIReportVersion = { id: aiReportVersions.length + 1, lab_id: Number(aiReportGenerate[1]), action: payload.action, style: payload.style, status: "suggested", model_name: aiSettings.model, original_text: baseLab.notes, suggested_text: "# Cache Poisoning\n\n## Objetivo\n\nDocumentação sugerida localmente.", ambiguities: ["Ferramenta não informada."], questions: ["Qual ferramenta foi utilizada?"], created_at: now, updated_at: now };
+      aiReportVersions.unshift(version); return json(version);
+    }
+    const aiReportReview = url.pathname.match(/^\/api\/labs\/(\d+)\/report\/ai\/versions\/(\d+)$/);
+    if (aiReportReview && method === "PATCH") {
+      const version = aiReportVersions.find((item) => item.id === Number(aiReportReview[2]))!; const action = JSON.parse(String(init?.body)).action;
+      version.status = action === "accept" ? "accepted" : "rejected"; version.updated_at = new Date().toISOString(); return json(version);
     }
     const reportRoute = url.pathname.match(/^\/api\/labs\/(\d+)\/report$/);
     if (reportRoute) {
@@ -231,6 +246,20 @@ describe("TraceLab", () => {
     expect(screen.getByText("Alterações não salvas")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
     await waitFor(() => expect(mock.report?.markdown).toContain("Edição manual"));
+    expect(mock.labs[0].notes).toBe(baseLab.notes);
+  });
+
+  it("gera README com Ollama, compara e exige aceite humano antes do editor", async () => {
+    const mock = installApi(); window.history.replaceState({}, "", "/labs/1"); render(<App />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Relatório" }));
+    fireEvent.change(await screen.findByLabelText("Estilo do relatório"), { target: { value: "study" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gerar README com IA" }));
+    expect(await screen.findByLabelText("Texto original")).toHaveValue(baseLab.notes);
+    expect((screen.getByLabelText("Texto sugerido") as HTMLTextAreaElement).value).toContain("Documentação sugerida");
+    expect(screen.getByText("Qual ferramenta foi utilizada?")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Editor Markdown")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Aceitar no editor" }));
+    expect(((await screen.findByLabelText("Editor Markdown")) as HTMLTextAreaElement).value).toContain("Documentação sugerida");
     expect(mock.labs[0].notes).toBe(baseLab.notes);
   });
 
