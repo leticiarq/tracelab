@@ -15,6 +15,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 def _read(db: Session, lab_id: int, report: object) -> dict[str, object]:
     lab = service._lab(db, lab_id)
     evidences = service._evidences(db, lab_id)
+    findings = service._findings(db, lab_id)
     return {
         "id": report.id,
         "lab_id": report.lab_id,
@@ -22,7 +23,7 @@ def _read(db: Session, lab_id: int, report: object) -> dict[str, object]:
         "revision": report.revision,
         "generated_at": report.generated_at,
         "updated_at": report.updated_at,
-        "incomplete_fields": service.incomplete_fields(lab, evidences),
+        "incomplete_fields": service.incomplete_fields(lab, findings, evidences),
         "sensitive_warnings": service.sensitive_warnings(report.markdown),
     }
 

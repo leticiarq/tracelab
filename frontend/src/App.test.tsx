@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import type { Evidence, Lab, Report } from "./types";
+import type { Evidence, Finding, Lab, Report } from "./types";
 import { SafeMarkdown } from "./pages/ReportTab";
 
 const platform = { id: 1, name: "Hack The Box", slug: "hack-the-box", website_url: "https://hackthebox.com", created_at: "2026-11-01T12:00:00Z" };
@@ -15,6 +15,7 @@ function json(body: unknown, status = 200) { return Promise.resolve(new Response
 function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
   const labs = initialLabs.map((lab) => ({ ...lab }));
   const evidences: Evidence[] = [];
+  const findings: Finding[] = [];
   let report: Report | null = null;
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -58,9 +59,32 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
       if (method === "GET") return json(evidences.filter((item) => item.lab_id === labId).sort((a, b) => a.display_order - b.display_order));
       if (method === "POST") {
         const files = Array.from((init?.body as FormData).getAll("files")) as File[];
-        const created = files.map((file, index): Evidence => ({ id: evidences.length + index + 1, lab_id: labId, original_filename: file.name, stored_filename: `${crypto.randomUUID()}.png`, mime_type: file.type || "image/png", file_size: file.size, sha256: "a".repeat(64), description: file.name.replace(/\.[^.]+$/, ""), step_label: null, display_order: evidences.length + index, created_at: new Date().toISOString() }));
+        const created = files.map((file, index): Evidence => ({ id: evidences.length + index + 1, lab_id: labId, finding_id: null, original_filename: file.name, stored_filename: `${crypto.randomUUID()}.png`, mime_type: file.type || "image/png", file_size: file.size, sha256: "a".repeat(64), description: file.name.replace(/\.[^.]+$/, ""), step_label: null, display_order: evidences.length + index, created_at: new Date().toISOString() }));
         evidences.push(...created); return json(created, 201);
       }
+    }
+    const findingCollection = url.pathname.match(/^\/api\/labs\/(\d+)\/findings$/);
+    if (findingCollection) {
+      const labId = Number(findingCollection[1]);
+      if (method === "GET") return json(findings.filter((item) => item.lab_id === labId));
+      if (method === "POST") {
+        const payload = JSON.parse(String(init?.body)); const now = new Date().toISOString();
+        const finding: Finding = { ...payload, id: findings.length + 1, lab_id: labId, slug: payload.title.toLowerCase().replaceAll(" ", "-"), display_order: findings.length, created_at: now, updated_at: now, cvss_assessment: null };
+        findings.push(finding); return json(finding, 201);
+      }
+    }
+    const findingOrder = url.pathname.match(/^\/api\/labs\/(\d+)\/findings\/order$/);
+    if (findingOrder && method === "PATCH") {
+      const ids = JSON.parse(String(init?.body)).finding_ids as number[];
+      ids.forEach((id, order) => { const item = findings.find((finding) => finding.id === id); if (item) item.display_order = order; });
+      return json(ids.map((id) => findings.find((item) => item.id === id)));
+    }
+    const findingItem = url.pathname.match(/^\/api\/labs\/(\d+)\/findings\/(\d+)$/);
+    if (findingItem) {
+      const id = Number(findingItem[2]); const index = findings.findIndex((item) => item.id === id);
+      if (index < 0) return json({ detail: "Finding not found" }, 404);
+      if (method === "PATCH") { findings[index] = { ...findings[index], ...JSON.parse(String(init?.body)) }; return json(findings[index]); }
+      if (method === "DELETE") { findings.splice(index, 1); return Promise.resolve(new Response(null, { status: 204 })); }
     }
     const evidenceOrder = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences\/order$/);
     if (evidenceOrder && method === "PATCH") {
@@ -86,7 +110,7 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
     return json({ detail: "Not found" }, 404);
   });
   vi.stubGlobal("fetch", fetchMock);
-  return { labs, evidences, fetchMock, get report() { return report; } };
+  return { labs, evidences, findings, fetchMock, get report() { return report; } };
 }
 
 beforeEach(() => { window.history.replaceState({}, "", "/"); vi.stubGlobal("scrollTo", vi.fn()); });
@@ -170,6 +194,17 @@ describe("TraceLab", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "Evidências" }));
     expect(await screen.findByText("Tela de autenticação")).toBeInTheDocument();
     expect(screen.getByText("3", { selector: ".evidence-heading span" })).toBeInTheDocument();
+  });
+
+  it("adiciona e edita uma vulnerabilidade sem exigir CVSS", async () => {
+    const mock = installApi(); window.history.replaceState({}, "", "/labs/1"); render(<App />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Vulnerabilidades" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Adicionar primeira vulnerabilidade" }));
+    fireEvent.change(screen.getByLabelText("Título da vulnerabilidade"), { target: { value: "SQL Injection" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar vulnerabilidade" }));
+    await waitFor(() => expect(mock.findings).toHaveLength(1));
+    expect(mock.findings[0].title).toBe("SQL Injection");
+    expect(mock.findings[0].cvss_assessment).toBeNull();
   });
 
   it("gera, edita e persiste o Markdown separadamente das anotações", async () => {

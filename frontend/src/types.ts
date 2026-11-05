@@ -56,6 +56,7 @@ export interface LabInput {
 export interface Evidence {
   id: number;
   lab_id: number;
+  finding_id: number | null;
   original_filename: string;
   stored_filename: string;
   mime_type: string;
@@ -66,6 +67,42 @@ export interface Evidence {
   display_order: number;
   created_at: string;
 }
+
+export type FindingStatus = "open" | "confirmed" | "remediated" | "accepted_risk";
+
+export interface CVSSAssessment {
+  id: number;
+  finding_id: number;
+  version: string;
+  vector: string;
+  score: number;
+  severity: string;
+  justification: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Finding {
+  id: number;
+  lab_id: number;
+  title: string;
+  slug: string;
+  category: string | null;
+  cwe_id: string | null;
+  description: string;
+  technical_details: string;
+  reproduction_steps: string;
+  impact: string;
+  mitigation: string;
+  status: FindingStatus;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+  cvss_assessment: CVSSAssessment | null;
+  evidences?: Evidence[];
+}
+
+export type FindingInput = Pick<Finding, "title" | "category" | "cwe_id" | "description" | "technical_details" | "reproduction_steps" | "impact" | "mitigation" | "status">;
 
 export interface Report {
   id: number;

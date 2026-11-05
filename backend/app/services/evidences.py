@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.evidence import Evidence
+from app.models.finding import Finding
 from app.models.lab import Lab
 from app.schemas.evidence import EvidenceReorder, EvidenceUpdate
 from app.services.errors import ConflictError, NotFoundError, ServiceError
@@ -206,6 +207,14 @@ def update_evidence(
 ) -> Evidence:
     evidence = get_evidence(db, lab_id, evidence_id)
     changes = data.model_dump(exclude_unset=True)
+    if "finding_id" in changes and changes["finding_id"] is not None:
+        finding = db.scalar(
+            select(Finding).where(
+                Finding.id == changes["finding_id"], Finding.lab_id == lab_id
+            )
+        )
+        if finding is None:
+            raise InvalidEvidenceError("Evidence can only be associated with a finding from this laboratory")
     for field, value in changes.items():
         if isinstance(value, str):
             value = value.strip()

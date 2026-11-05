@@ -2,15 +2,11 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { api, evidenceContentUrl } from "../api";
 import { Button, Icons, LoadingState } from "../components";
-import type { Evidence, Lab, Report } from "../types";
+import type { Evidence, Finding, Lab, Report } from "../types";
 
-type NarrativeKey = "objective" | "vulnerability_description" | "resolution_steps" | "impact" | "mitigation" | "learnings";
+type NarrativeKey = "objective" | "learnings";
 const FIELDS: Array<{ key: NarrativeKey; label: string; placeholder: string }> = [
   { key: "objective", label: "Objetivo", placeholder: "O que deve ser alcançado neste laboratório?" },
-  { key: "vulnerability_description", label: "Vulnerabilidade", placeholder: "Descreva a vulnerabilidade observada." },
-  { key: "resolution_steps", label: "Etapas da resolução", placeholder: "Registre a metodologia e as etapas executadas." },
-  { key: "impact", label: "Impacto", placeholder: "Qual é o impacto técnico ou de negócio?" },
-  { key: "mitigation", label: "Mitigação", placeholder: "Como corrigir ou reduzir o risco?" },
   { key: "learnings", label: "Aprendizados", placeholder: "Quais foram os principais aprendizados?" },
 ];
 
@@ -18,6 +14,7 @@ export function ReportTab({ lab, onLabChange, notify }: { lab: Lab; onLabChange:
   const [report, setReport] = useState<Report | null>(null);
   const [markdown, setMarkdown] = useState("");
   const [evidences, setEvidences] = useState<Evidence[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [fields, setFields] = useState<Record<NarrativeKey, string>>(() => sourceFields(lab));
   const [mode, setMode] = useState<"code" | "preview">("code");
@@ -27,9 +24,9 @@ export function ReportTab({ lab, onLabChange, notify }: { lab: Lab; onLabChange:
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([api.getReport(lab.id), api.listEvidences(lab.id)])
-      .then(([saved, items]) => {
-        setReport(saved); setMarkdown(saved?.markdown || ""); setEvidences(items); setSelected(items.map((item) => item.id));
+    Promise.all([api.getReport(lab.id), api.listEvidences(lab.id), api.listFindings(lab.id)])
+      .then(([saved, items, findingItems]) => {
+        setReport(saved); setMarkdown(saved?.markdown || ""); setEvidences(items); setFindings(findingItems); setSelected(items.map((item) => item.id));
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Falha ao carregar o relatório."))
       .finally(() => setLoading(false));
@@ -42,7 +39,6 @@ export function ReportTab({ lab, onLabChange, notify }: { lab: Lab; onLabChange:
   }, [dirty]);
 
   const missing = FIELDS.filter((field) => !fields[field.key].trim()).map((field) => field.label);
-  if (!evidences.length) missing.push("Evidências");
   const imageMap = useMemo(() => new Map(evidences.map((item, index) => [`evidence/${exportName(item, index + 1)}`, evidenceContentUrl(lab.id, item.id)])), [evidences, lab.id]);
 
   const generate = async (overwrite: boolean) => {
@@ -80,7 +76,7 @@ export function ReportTab({ lab, onLabChange, notify }: { lab: Lab; onLabChange:
   return (
     <section className="report-tab" role="tabpanel">
       <div className="panel report-source">
-        <div className="panel-heading"><div><h2>Conteúdo do relatório</h2><p>Os campos vazios serão omitidos. As anotações livres entram na metodologia sem serem alteradas.</p></div></div>
+        <div className="panel-heading"><div><h2>Conteúdo geral do relatório</h2><p>As {findings.length} vulnerabilidade{findings.length === 1 ? "" : "s"} e suas evidências serão incluídas automaticamente. Laboratórios sem achados também podem ser documentados.</p></div></div>
         <div className="report-fields">{FIELDS.map((field) => <label className="field" key={field.key}><span>{field.label}</span><textarea value={fields[field.key]} placeholder={field.placeholder} onChange={(event) => setFields((current) => ({ ...current, [field.key]: event.target.value }))} /></label>)}</div>
         {missing.length > 0 && <div className="report-warning"><Icons.alert className="h-5 w-5" /><span>Campos incompletos (serão omitidos): {missing.join(", ")}.</span></div>}
         <div className="report-actions"><Button onClick={() => void generate(false)} disabled={busy || Boolean(report)}>Gerar Markdown</Button>{report && <Button variant="secondary" onClick={() => void generate(true)} disabled={busy}>Regenerar</Button>}</div>
@@ -104,7 +100,7 @@ export function ReportTab({ lab, onLabChange, notify }: { lab: Lab; onLabChange:
 }
 
 function sourceFields(lab: Lab): Record<NarrativeKey, string> {
-  return { objective: lab.objective || "", vulnerability_description: lab.vulnerability_description || "", resolution_steps: lab.resolution_steps || "", impact: lab.impact || "", mitigation: lab.mitigation || "", learnings: lab.learnings || "" };
+  return { objective: lab.objective || "", learnings: lab.learnings || "" };
 }
 
 function exportName(evidence: Evidence, position: number) {
