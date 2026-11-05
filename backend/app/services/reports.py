@@ -235,17 +235,10 @@ def generate_report(db: Session, lab_id: int, confirm_overwrite: bool) -> Report
 def save_report(db: Session, lab_id: int, markdown: str) -> Report:
     report = get_report(db, lab_id)
     if report is None:
-        evidences = _evidences(db, lab_id)
-        manifest = json.dumps(
-            {evidence_export_name(item, position): item.id for position, item in enumerate(evidences, 1)},
-            sort_keys=True,
-        )
-        report = Report(lab_id=lab_id, markdown=markdown, evidence_manifest=manifest)
-        db.add(report)
-    else:
-        report.markdown = markdown
-        report.revision += 1
-        report.updated_at = datetime.now(timezone.utc)
+        raise NotFoundError("Report not found; generate it before saving")
+    report.markdown = markdown
+    report.revision += 1
+    report.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(report)
     return report
