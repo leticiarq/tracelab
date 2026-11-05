@@ -5,7 +5,6 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { LabDetailsPage } from "./pages/LabDetailsPage";
 import { LabFormPage } from "./pages/LabFormPage";
 import { LabsPage } from "./pages/LabsPage";
-import { AISettingsPage } from "./pages/AISettingsPage";
 
 export type Navigate = (path: string) => void;
 
@@ -29,13 +28,12 @@ function App() {
   const pathname = path.split("?")[0];
   const labMatch = pathname.match(/^\/labs\/(\d+)$/);
   const isEdit = new URLSearchParams(path.split("?")[1] || "").get("edit") === "1";
-  const activeSection = pathname === "/" ? "dashboard" : pathname === "/settings/ai" ? "ai" : "labs";
+  const activeSection = pathname === "/" ? "dashboard" : "labs";
 
   let content;
   if (pathname === "/") content = <DashboardPage navigate={navigate} />;
   else if (pathname === "/labs") content = <LabsPage navigate={navigate} />;
   else if (pathname === "/labs/new") content = <LabFormPage navigate={navigate} />;
-  else if (pathname === "/settings/ai") content = <AISettingsPage />;
   else if (labMatch && isEdit) content = <LabFormPage navigate={navigate} labId={Number(labMatch[1])} />;
   else if (labMatch) content = <LabDetailsPage navigate={navigate} labId={Number(labMatch[1])} />;
   else content = <NotFound navigate={navigate} />;
@@ -62,7 +60,6 @@ function App() {
         <nav aria-label="Navegação principal">
           <a href="/" className={activeSection === "dashboard" ? "nav-link active" : "nav-link"} onClick={(event) => link(event, "/")}><Icons.grid className="h-5 w-5" />Dashboard</a>
           <a href="/labs" className={activeSection === "labs" ? "nav-link active" : "nav-link"} onClick={(event) => link(event, "/labs")}><Icons.flask className="h-5 w-5" />Meus laboratórios</a>
-          <a href="/settings/ai" className={activeSection === "ai" ? "nav-link active" : "nav-link"} onClick={(event) => link(event, "/settings/ai")}><Icons.settings className="h-5 w-5" />Configurações de IA</a>
         </nav>
         <div className="sidebar-bottom">
           <a className="button button-primary w-full" href="/labs/new" onClick={(event) => link(event, "/labs/new")}><Icons.plus className="h-5 w-5" />Novo laboratório</a>

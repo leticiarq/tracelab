@@ -4,16 +4,9 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.routes.ai import get_ai_service
-from app.schemas.ai_report import (
-    AIReportGenerate,
-    AIReportReview,
-    AIReportVersionRead,
-)
 from app.db.session import get_db
 from app.schemas.report import ReportExport, ReportGenerate, ReportRead, ReportSave
 from app.services import reports as service
-from app.services import ai_reports
 
 router = APIRouter(prefix="/api/labs/{lab_id}/report", tags=["reports"])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -60,20 +53,3 @@ async def export_report(lab_id: int, data: ReportExport, db: DbSession) -> Respo
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-@router.get("/ai/versions", response_model=list[AIReportVersionRead])
-async def list_ai_report_versions(lab_id: int, db: DbSession) -> object:
-    return ai_reports.list_versions(db, lab_id)
-
-
-@router.post("/ai/generate", response_model=AIReportVersionRead)
-async def generate_ai_report(lab_id: int, data: AIReportGenerate, db: DbSession) -> object:
-    return await ai_reports.generate(db, lab_id, data, get_ai_service())
-
-
-@router.patch("/ai/versions/{version_id}", response_model=AIReportVersionRead)
-async def review_ai_report_version(
-    lab_id: int, version_id: int, data: AIReportReview, db: DbSession
-) -> object:
-    return ai_reports.review(db, lab_id, version_id, data.action)

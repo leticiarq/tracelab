@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { api, evidenceContentUrl } from "../api";
 import { Button, Icons, LoadingState } from "../components";
-import type { AIReportAction, AIReportStyle, AIReportVersion, Evidence, Lab, Report } from "../types";
+import type { Evidence, Lab, Report } from "../types";
 
 type NarrativeKey = "objective" | "vulnerability_description" | "resolution_steps" | "impact" | "mitigation" | "learnings";
 const FIELDS: Array<{ key: NarrativeKey; label: string; placeholder: string }> = [
@@ -22,25 +22,20 @@ export function ReportTab({ lab, onLabChange, notify }: { lab: Lab; onLabChange:
   const [fields, setFields] = useState<Record<NarrativeKey, string>>(() => sourceFields(lab));
   const [mode, setMode] = useState<"code" | "preview">("code");
   const [reviewed, setReviewed] = useState(false);
-  const [aiStyle, setAIStyle] = useState<AIReportStyle>("professional");
-  const [aiVersions, setAIVersions] = useState<AIReportVersion[]>([]);
-  const [suggestion, setSuggestion] = useState<AIReportVersion | null>(null);
-  const [aiBusy, setAIBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([api.getReport(lab.id), api.listEvidences(lab.id), api.listAIReportVersions(lab.id)])
-      .then(([saved, items, versions]) => {
+    Promise.all([api.getReport(lab.id), api.listEvidences(lab.id)])
+      .then(([saved, items]) => {
         setReport(saved); setMarkdown(saved?.markdown || ""); setEvidences(items); setSelected(items.map((item) => item.id));
-        setAIVersions(versions); setSuggestion(versions[0] || null);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Falha ao carregar o relatório."))
       .finally(() => setLoading(false));
   }, [lab.id]);
 
-  const dirty = report ? markdown !== report.markdown : Boolean(markdown);
+  const dirty = report !== null && markdown !== report.markdown;
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
     window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn);
@@ -81,33 +76,6 @@ export function ReportTab({ lab, onLabChange, notify }: { lab: Lab; onLabChange:
     finally { setBusy(false); }
   };
 
-  const runAI = async (action: AIReportAction) => {
-    setAIBusy(true); setError("");
-    try {
-      const generated = await api.generateAIReport(lab.id, action, aiStyle, selected);
-      setSuggestion(generated); setAIVersions((current) => [generated, ...current]);
-      notify("Sugestão gerada localmente. Revise antes de aceitar.");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao gerar a sugestão."); }
-    finally { setAIBusy(false); }
-  };
-
-  const cancelAI = async () => {
-    try { await api.cancelAIOperation(); notify("Cancelamento solicitado."); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao cancelar a geração."); }
-  };
-
-  const reviewSuggestion = async (action: "accept" | "reject") => {
-    if (!suggestion) return;
-    setError("");
-    try {
-      const reviewedSuggestion = await api.reviewAIReport(lab.id, suggestion.id, action);
-      setSuggestion(reviewedSuggestion);
-      setAIVersions((current) => current.map((item) => item.id === reviewedSuggestion.id ? reviewedSuggestion : item));
-      if (action === "accept") { setMarkdown(reviewedSuggestion.suggested_text); setMode("code"); notify("Sugestão aceita no editor; salve quando terminar a revisão."); }
-      else notify("Sugestão rejeitada; o conteúdo original foi preservado.");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao revisar a sugestão."); }
-  };
-
   if (loading) return <LoadingState label="Carregando relatório" />;
   return (
     <section className="report-tab" role="tabpanel">
@@ -118,32 +86,11 @@ export function ReportTab({ lab, onLabChange, notify }: { lab: Lab; onLabChange:
         <div className="report-actions"><Button onClick={() => void generate(false)} disabled={busy || Boolean(report)}>Gerar Markdown</Button>{report && <Button variant="secondary" onClick={() => void generate(true)} disabled={busy}>Regenerar</Button>}</div>
       </div>
 
-      <div className="panel ai-report-panel">
-        <div className="panel-heading"><div><h2>Assistente de IA local</h2><p>O Ollama só é chamado quando você escolher uma ação. Nenhuma sugestão substitui o conteúdo original automaticamente.</p></div>
-          <label className="field ai-style"><span>Estilo</span><select aria-label="Estilo do relatório" value={aiStyle} onChange={(event) => setAIStyle(event.target.value as AIReportStyle)}><option value="professional">Técnico profissional</option><option value="github">Simples para GitHub</option><option value="study">Didático para estudo</option></select></label>
-        </div>
-        <div className="ai-report-actions">
-          <Button variant="secondary" onClick={() => void runAI("improve_notes")} disabled={aiBusy}>Melhorar com IA</Button>
-          <Button variant="secondary" onClick={() => void runAI("explain_vulnerability")} disabled={aiBusy}>Explicar vulnerabilidade</Button>
-          <Button variant="secondary" onClick={() => void runAI("missing_information")} disabled={aiBusy}>Identificar informações faltantes</Button>
-          <Button onClick={() => void runAI("generate_readme")} disabled={aiBusy}>Gerar README com IA</Button>
-          {aiBusy && <Button variant="danger" onClick={() => void cancelAI()}>Cancelar</Button>}
-        </div>
-        {aiBusy && <div className="analysis-processing" role="status"><span className="spinner" />Gerando uma sugestão por vez no Ollama local…</div>}
-        {suggestion && <div className="ai-comparison">
-          <div className="comparison-heading"><strong>Revisão humana</strong><span>{suggestion.status === "suggested" ? "Aguardando decisão" : suggestion.status === "accepted" ? "Aceita" : "Rejeitada"}</span></div>
-          <div className="comparison-columns"><label><span>Original preservado</span><textarea aria-label="Texto original" value={suggestion.original_text || "Nenhum texto original disponível."} readOnly /></label><label><span>Sugestão da IA</span><textarea aria-label="Texto sugerido" value={suggestion.suggested_text} readOnly /></label></div>
-          {(suggestion.ambiguities.length > 0 || suggestion.questions.length > 0) && <div className="ai-review-notes">{suggestion.ambiguities.length > 0 && <div><strong>Ambiguidades</strong><ul>{suggestion.ambiguities.map((item) => <li key={item}>{item}</li>)}</ul></div>}{suggestion.questions.length > 0 && <div><strong>Perguntas sugeridas</strong><ul>{suggestion.questions.map((item) => <li key={item}>{item}</li>)}</ul></div>}</div>}
-          {suggestion.status === "suggested" && <div className="ai-review-actions"><Button variant="secondary" onClick={() => void reviewSuggestion("reject")}>Rejeitar</Button><Button onClick={() => void reviewSuggestion("accept")}>Aceitar no editor</Button></div>}
-        </div>}
-        {aiVersions.length > 1 && <label className="field ai-history"><span>Versões geradas</span><select aria-label="Versões geradas" value={suggestion?.id || ""} onChange={(event) => setSuggestion(aiVersions.find((item) => item.id === Number(event.target.value)) || null)}>{aiVersions.map((item) => <option key={item.id} value={item.id}>{new Date(item.created_at).toLocaleString("pt-BR")} · {item.action}</option>)}</select></label>}
-      </div>
-
       {error && <div className="inline-error" role="alert"><Icons.alert className="h-5 w-5" />{error}</div>}
-      {(report || markdown) && <div className="panel report-workspace">
-        <div className="report-toolbar"><div className="view-toggle" aria-label="Alternar visualização"><button className={mode === "code" ? "active" : ""} onClick={() => setMode("code")}>Código</button><button className={mode === "preview" ? "active" : ""} onClick={() => setMode("preview")}>Visualização</button></div><span className={dirty ? "save-state dirty" : "save-state"}><span />{dirty ? "Alterações não salvas" : report ? `Revisão ${report.revision}` : "Novo relatório"}</span></div>
+      {report && <div className="panel report-workspace">
+        <div className="report-toolbar"><div className="view-toggle" aria-label="Alternar visualização"><button className={mode === "code" ? "active" : ""} onClick={() => setMode("code")}>Código</button><button className={mode === "preview" ? "active" : ""} onClick={() => setMode("preview")}>Visualização</button></div><span className={dirty ? "save-state dirty" : "save-state"}><span />{dirty ? "Alterações não salvas" : `Revisão ${report.revision}`}</span></div>
         {mode === "code" ? <label className="report-editor"><span className="sr-only">Editor Markdown</span><textarea value={markdown} onChange={(event) => setMarkdown(event.target.value)} spellCheck={false} /></label> : <SafeMarkdown markdown={markdown} imageMap={imageMap} />}
-        <div className="report-footer"><span>{markdown.length.toLocaleString("pt-BR")} caracteres</span><Button onClick={() => void save()} disabled={busy || !dirty || !markdown.trim()}>Salvar</Button></div>
+        <div className="report-footer"><span>{markdown.length.toLocaleString("pt-BR")} caracteres</span><Button onClick={() => void save()} disabled={busy || !dirty}>Salvar</Button></div>
       </div>}
 
       {report && <div className="panel export-panel"><div className="panel-heading"><div><h2>Exportar para GitHub</h2><p>Revise e selecione somente as evidências que devem fazer parte do ZIP.</p></div></div><div className="export-content">
