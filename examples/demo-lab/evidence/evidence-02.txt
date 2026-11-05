@@ -1,0 +1,5 @@
+Synthetic response
+Status: 403 Forbidden
+Body: {"detail":"Access denied"}
+
+Expected result: the server denies access to an object not owned by the current fictional user.
