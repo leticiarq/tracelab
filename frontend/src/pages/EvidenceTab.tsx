@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, evidenceContentUrl, evidenceDownloadUrl } from "../api";
 import { Button, ConfirmDialog, EmptyState, ErrorState, Icons, LoadingState } from "../components";
-import type { Evidence } from "../types";
+import type { Evidence, Finding } from "../types";
 
 const ACCEPT = ".png,.jpg,.jpeg,.webp,.txt,.http,image/png,image/jpeg,image/webp,text/plain,message/http";
 
@@ -14,6 +14,7 @@ export function EvidenceTab({
   notify: (message: string) => void;
 }) {
   const [evidences, setEvidences] = useState<Evidence[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [textContent, setTextContent] = useState("");
   const [loading, setLoading] = useState(true);
@@ -25,13 +26,15 @@ export function EvidenceTab({
   const [pendingDelete, setPendingDelete] = useState<Evidence | null>(null);
   const [description, setDescription] = useState("");
   const [stepLabel, setStepLabel] = useState("");
+  const [findingId, setFindingId] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const items = await api.listEvidences(labId);
+      const [items, findingItems] = await Promise.all([api.listEvidences(labId), api.listFindings(labId)]);
       setEvidences(items);
+      setFindings(findingItems);
       setSelectedId((current) => current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null);
     } catch (reason) { setError(messageFrom(reason, "Falha ao carregar as evidências.")); }
     finally { setLoading(false); }
@@ -43,6 +46,7 @@ export function EvidenceTab({
   useEffect(() => {
     setDescription(selected?.description ?? "");
     setStepLabel(selected?.step_label ?? "");
+    setFindingId(selected?.finding_id ?? null);
     setTextContent("");
     if (!selected || selected.mime_type.startsWith("image/")) return;
     const controller = new AbortController();
@@ -74,7 +78,7 @@ export function EvidenceTab({
     if (!selected) return;
     setSaving(true); setError("");
     try {
-      const updated = await api.updateEvidence(labId, selected.id, { description, step_label: stepLabel || null });
+      const updated = await api.updateEvidence(labId, selected.id, { description, step_label: stepLabel || null, finding_id: findingId });
       setEvidences((items) => items.map((item) => item.id === updated.id ? updated : item));
       notify("Nome, legenda e etapa salvos.");
     } catch (reason) { setError(messageFrom(reason, "Falha ao salvar os metadados.")); }
@@ -149,6 +153,7 @@ export function EvidenceTab({
               <div className="evidence-fields">
                 <label className="field">Nome descritivo / legenda<input value={description} maxLength={2000} onChange={(event) => setDescription(event.target.value)} /></label>
                 <label className="field">Etapa do laboratório<input value={stepLabel} maxLength={200} placeholder="Ex.: 02 · Exploração" onChange={(event) => setStepLabel(event.target.value)} /></label>
+                <label className="field">Vulnerabilidade<select value={findingId ?? ""} onChange={(event) => setFindingId(event.target.value ? Number(event.target.value) : null)}><option value="">Evidência geral do laboratório</option>{findings.map((finding) => <option key={finding.id} value={finding.id}>{finding.title}</option>)}</select></label>
                 <div className="evidence-file-meta"><span>{selected.original_filename}</span><span>{formatBytes(selected.file_size)} · SHA-256 {selected.sha256.slice(0, 12)}…</span></div>
                 <div className="privacy-note"><Icons.alert className="h-5 w-5" /><span>Revise tokens, credenciais e dados pessoais antes de exportar ou compartilhar esta evidência.</span></div>
                 <div className="evidence-actions">
@@ -156,7 +161,7 @@ export function EvidenceTab({
                   <Button variant="secondary" onClick={() => void move(1)} disabled={selected.display_order === evidences.length - 1} aria-label="Mover evidência para baixo">↓</Button>
                   <a className="button button-secondary" href={evidenceDownloadUrl(labId, selected.id)}>Download</a>
                   <Button variant="danger" onClick={() => setPendingDelete(selected)}>Excluir</Button>
-                  <Button onClick={() => void saveMetadata()} disabled={saving || (description === selected.description && stepLabel === (selected.step_label || ""))}>{saving ? "Salvando…" : "Salvar"}</Button>
+                  <Button onClick={() => void saveMetadata()} disabled={saving || (description === selected.description && stepLabel === (selected.step_label || "") && findingId === selected.finding_id)}>{saving ? "Salvando…" : "Salvar"}</Button>
                 </div>
               </div>
             </article>

@@ -17,6 +17,10 @@ The initial architecture favors local execution, explicit boundaries, and a smal
 
 FastAPI exposes `GET /health` and CRUD collections under `/api/platforms`, `/api/categories`, and `/api/labs`. Lab IDs are database-generated and remain stable when a title changes. Human-readable slugs are normalized and receive numeric suffixes on collisions.
 
+`Lab` owns zero or more ordered `Finding` records. Each finding may own one optional `CVSSAssessment`. `Evidence` always retains its required `lab_id` and may additionally reference a finding from the same lab; deleting a finding sets that association to null and keeps the evidence file. Reports remain one-per-lab so manually edited Markdown survives model migrations and ordinary finding edits until explicit regeneration.
+
+The current report format is a single `README.md`. A future separated mode can reuse finding slugs to create `findings/<slug>/README.md`; it is intentionally not implemented yet to keep export compatibility and path validation simple.
+
 ## Frontend
 
 - `src`: React components and application entry point.

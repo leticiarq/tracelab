@@ -17,6 +17,9 @@ class Evidence(Base):
     lab_id: Mapped[int] = mapped_column(
         ForeignKey("labs.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    finding_id: Mapped[int | None] = mapped_column(
+        ForeignKey("findings.id", ondelete="SET NULL"), index=True
+    )
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     stored_filename: Mapped[str] = mapped_column(String(80), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -30,3 +33,4 @@ class Evidence(Base):
     )
 
     lab: Mapped["Lab"] = relationship(back_populates="evidences")  # noqa: F821
+    finding: Mapped["Finding | None"] = relationship(back_populates="evidences")  # noqa: F821

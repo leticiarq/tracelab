@@ -4,7 +4,7 @@ Local-first cybersecurity lab documentation tool. Organize findings, manage evid
 
 ## Status
 
-TraceLab provides a FastAPI backend with persistent management of platforms, categories, labs, evidence and Markdown reports, plus a responsive React interface.
+TraceLab provides a FastAPI backend with persistent management of platforms, categories, labs, multiple vulnerability findings, evidence, optional CVSS records and Markdown reports, plus a responsive React interface.
 
 ## Requirements
 
@@ -64,7 +64,9 @@ Expected response:
 {"status":"ok"}
 ```
 
-Interactive OpenAPI documentation is available at `http://127.0.0.1:8000/docs`. The lab management resources are exposed under `/api/platforms`, `/api/categories`, and `/api/labs`.
+Interactive OpenAPI documentation is available at `http://127.0.0.1:8000/docs`. Findings are exposed under `/api/labs/{lab_id}/findings`; evidence remains owned by the lab and may optionally reference one finding.
+
+Before upgrading an existing database, follow [the backup procedure](docs/database-backup.md), then run `poetry run alembic upgrade head` from `backend/`.
 
 Run backend tests:
 
@@ -90,7 +92,9 @@ The web interface includes:
 - progress metrics and recent laboratories on the dashboard;
 - searchable, filterable, paginated laboratory management;
 - laboratory creation and editing, with inline platform and category creation;
-- detailed information, notes, evidence, and report tabs;
+- detailed information, notes, vulnerabilities, evidence, and report tabs;
+- zero, one or many findings per lab, with optional manually supplied CVSS data;
+- general evidence or evidence associated with a specific finding;
 - explicit note saving with unsaved-change feedback.
 
 Run frontend tests:

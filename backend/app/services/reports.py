@@ -6,10 +6,11 @@ from datetime import datetime, timezone
 from pathlib import PurePosixPath
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.models.evidence import Evidence
+from app.models.finding import Finding
 from app.models.lab import Lab
 from app.models.report import Report
 from app.services.errors import ConflictError, NotFoundError, ServiceError
@@ -52,6 +53,17 @@ def _evidences(db: Session, lab_id: int) -> list[Evidence]:
     )
 
 
+def _findings(db: Session, lab_id: int) -> list[Finding]:
+    return list(
+        db.scalars(
+            select(Finding)
+            .options(selectinload(Finding.cvss_assessment))
+            .where(Finding.lab_id == lab_id)
+            .order_by(Finding.display_order, Finding.id)
+        )
+    )
+
+
 def evidence_export_name(evidence: Evidence, position: int) -> str:
     extension = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "text/plain": ".txt", "message/http": ".http"}[evidence.mime_type]
     prefix = "image" if evidence.mime_type in IMAGE_TYPES else "evidence"
@@ -72,18 +84,25 @@ def _section(number: int, title: str, content: str | None) -> str | None:
     return f"## {number}. {title}\n\n{content}"
 
 
-def incomplete_fields(lab: Lab, evidences: list[Evidence]) -> list[str]:
-    fields = {
-        "Objetivo": lab.objective,
-        "Vulnerabilidade": lab.vulnerability_description,
-        "Etapas da resolução": lab.resolution_steps,
-        "Impacto": lab.impact,
-        "Mitigação": lab.mitigation,
-        "Aprendizados": lab.learnings,
-    }
+def incomplete_fields(lab: Lab, findings: list[Finding], evidences: list[Evidence]) -> list[str]:
+    fields = {"Objetivo": lab.objective, "Aprendizados": lab.learnings}
+    if not findings and any((lab.vulnerability_description, lab.resolution_steps, lab.impact, lab.mitigation)):
+        fields.update({
+            "Vulnerabilidade": lab.vulnerability_description,
+            "Etapas da resolução": lab.resolution_steps,
+            "Impacto": lab.impact,
+            "Mitigação": lab.mitigation,
+        })
     missing = [label for label, value in fields.items() if not value or not value.strip()]
-    if not evidences:
-        missing.append("Evidências")
+    for finding in findings:
+        for label, value in (
+            ("Descrição", finding.description),
+            ("Reprodução", finding.reproduction_steps),
+            ("Impacto", finding.impact),
+            ("Mitigação", finding.mitigation),
+        ):
+            if not value.strip():
+                missing.append(f"{finding.title}: {label}")
     return missing
 
 
@@ -91,7 +110,59 @@ def sensitive_warnings(markdown: str) -> list[str]:
     return [label for label, pattern in SENSITIVE_PATTERNS.items() if pattern.search(markdown)]
 
 
-def build_markdown(lab: Lab, evidences: list[Evidence]) -> str:
+def _evidence_markdown(evidences: list[Evidence], all_evidences: list[Evidence]) -> str:
+    positions = {item.id: position for position, item in enumerate(all_evidences, 1)}
+    lines: list[str] = []
+    for evidence in evidences:
+        name = evidence_export_name(evidence, positions[evidence.id])
+        caption = evidence.description.strip() or evidence.original_filename
+        if evidence.step_label:
+            lines.append(f"### {_escape_inline(evidence.step_label)}")
+        if evidence.mime_type in IMAGE_TYPES:
+            lines.append(f"![{_escape_inline(caption)}](evidence/{name})")
+        else:
+            lines.append(f"[{_escape_inline(caption)}](evidence/{name})")
+        lines.append(f"_{_escape_inline(caption)}_")
+    return "\n\n".join(lines)
+
+
+def _finding_section(finding: Finding, evidences: list[Evidence], all_evidences: list[Evidence], level: int) -> str:
+    heading = "#" * level
+    parts = [f"{heading} {_escape_inline(finding.title)}"]
+    metadata = []
+    if finding.category:
+        metadata.append(f"- Categoria: {_escape_inline(finding.category)}")
+    if finding.cwe_id:
+        metadata.append(f"- CWE: {finding.cwe_id}")
+    metadata.append(f"- Status: {finding.status.value}")
+    parts.append("\n".join(metadata))
+    for title, content in (
+        ("Descrição", finding.description),
+        ("Detalhes técnicos", finding.technical_details),
+        ("Passos de reprodução", finding.reproduction_steps),
+    ):
+        if content.strip():
+            parts.append(f"{heading}# {title}\n\n{content}")
+    related = [item for item in evidences if item.finding_id == finding.id]
+    if related:
+        parts.append(f"{heading}# Evidências\n\n{_evidence_markdown(related, all_evidences)}")
+    if finding.impact.strip():
+        parts.append(f"{heading}# Impacto\n\n{finding.impact}")
+    if finding.cvss_assessment:
+        cvss = finding.cvss_assessment
+        cvss_lines = [
+            f"- Versão: {cvss.version}", f"- Vetor: `{cvss.vector}`",
+            f"- Pontuação: {cvss.score:g}", f"- Severidade: {cvss.severity}",
+        ]
+        if cvss.justification.strip():
+            cvss_lines.append(f"\n{cvss.justification}")
+        parts.append(f"{heading}# CVSS\n\n" + "\n".join(cvss_lines))
+    if finding.mitigation.strip():
+        parts.append(f"{heading}# Mitigação\n\n{finding.mitigation}")
+    return "\n\n".join(parts)
+
+
+def build_markdown(lab: Lab, findings: list[Finding], evidences: list[Evidence]) -> str:
     general = [f"- Plataforma: {_escape_inline(lab.platform.name)}"]
     if lab.category:
         general.append(f"- Categoria: {_escape_inline(lab.category.name)}")
@@ -100,32 +171,41 @@ def build_markdown(lab: Lab, evidences: list[Evidence]) -> str:
     if lab.source_url:
         general.append(f"- Link original: <{lab.source_url}>")
 
-    methodology_parts = [value for value in (lab.resolution_steps, lab.notes) if value and value.strip()]
-    evidence_lines: list[str] = []
-    for position, evidence in enumerate(evidences, 1):
-        name = evidence_export_name(evidence, position)
-        caption = evidence.description.strip() or evidence.original_filename
-        if evidence.step_label:
-            evidence_lines.append(f"### {_escape_inline(evidence.step_label)}")
-        if evidence.mime_type in IMAGE_TYPES:
-            alt = _escape_inline(caption)
-            evidence_lines.append(f"![{alt}](evidence/{name})")
+    sections: list[str | None] = [f"# {_escape_inline(lab.title)}", "## 1. Informações gerais\n\n" + "\n".join(general)]
+    sections.append(_section(2, "Objetivo", lab.objective))
+    if findings:
+        sections.append(_section(3, "Metodologia geral", lab.notes))
+        if len(findings) > 1:
+            rows = ["| Achado | Categoria | Status | CVSS |", "|---|---|---|---|"]
+            for finding in findings:
+                cvss = finding.cvss_assessment
+                rows.append(
+                    f"| {_escape_inline(finding.title)} | {_escape_inline(finding.category or '—')} | "
+                    f"{finding.status.value} | {f'{cvss.score:g} · {cvss.severity}' if cvss else '—'} |"
+                )
+            sections.append("## 4. Resumo dos achados\n\n" + "\n".join(rows))
+            sections.append("## 5. Vulnerabilidades\n\n" + "\n\n".join(
+                _finding_section(item, evidences, evidences, 3) for item in findings
+            ))
+            next_number = 6
         else:
-            evidence_lines.append(f"[{_escape_inline(caption)}](evidence/{name})")
-        if caption:
-            evidence_lines.append(f"_{_escape_inline(caption)}_")
-
-    sections = [
-        f"# {lab.title}",
-        "## 1. Informações gerais\n\n" + "\n".join(general),
-        _section(2, "Objetivo", lab.objective),
-        _section(3, "Vulnerabilidade", lab.vulnerability_description),
-        _section(4, "Metodologia e resolução", "\n\n".join(methodology_parts)),
-        _section(5, "Evidências", "\n\n".join(evidence_lines)),
-        _section(6, "Impacto", lab.impact),
-        _section(7, "Mitigação", lab.mitigation),
-        _section(8, "Aprendizados", lab.learnings),
-    ]
+            sections.append("## 4. Vulnerabilidade\n\n" + _finding_section(findings[0], evidences, evidences, 3))
+            next_number = 5
+        general_evidence = [item for item in evidences if item.finding_id is None]
+        if general_evidence:
+            sections.append(_section(next_number, "Evidências gerais", _evidence_markdown(general_evidence, evidences)))
+            next_number += 1
+        sections.append(_section(next_number, "Conclusão e aprendizados", lab.learnings))
+    else:
+        methodology_parts = [value for value in (lab.resolution_steps, lab.notes) if value and value.strip()]
+        sections.extend([
+            _section(3, "Vulnerabilidade", lab.vulnerability_description),
+            _section(4, "Metodologia e resolução", "\n\n".join(methodology_parts)),
+            _section(5, "Evidências", _evidence_markdown(evidences, evidences)),
+            _section(6, "Impacto", lab.impact),
+            _section(7, "Mitigação", lab.mitigation),
+            _section(8, "Conclusão e aprendizados", lab.learnings),
+        ])
     return "\n\n".join(section for section in sections if section) + "\n"
 
 
@@ -137,10 +217,11 @@ def get_report(db: Session, lab_id: int) -> Report | None:
 def generate_report(db: Session, lab_id: int, confirm_overwrite: bool) -> Report:
     lab = _lab(db, lab_id)
     evidences = _evidences(db, lab_id)
+    findings = _findings(db, lab_id)
     report = db.scalar(select(Report).where(Report.lab_id == lab_id))
     if report is not None and not confirm_overwrite:
         raise ConflictError("A report already exists; confirm regeneration before replacing it")
-    markdown = build_markdown(lab, evidences)
+    markdown = build_markdown(lab, findings, evidences)
     manifest = json.dumps(
         {evidence_export_name(item, position): item.id for position, item in enumerate(evidences, 1)},
         sort_keys=True,

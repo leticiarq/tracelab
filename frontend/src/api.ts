@@ -1,4 +1,4 @@
-import type { Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report } from "./types";
+import type { Category, CVSSAssessment, Evidence, Finding, FindingInput, Lab, LabInput, LabStatus, Page, Platform, Report } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -108,7 +108,7 @@ export const api = {
     files.forEach((file) => body.append("files", file));
     return request<Evidence[]>(`/api/labs/${labId}/evidences`, { method: "POST", body });
   },
-  updateEvidence(labId: number, evidenceId: number, data: { description?: string; step_label?: string | null }) {
+  updateEvidence(labId: number, evidenceId: number, data: { description?: string; step_label?: string | null; finding_id?: number | null }) {
     return request<Evidence>(`/api/labs/${labId}/evidences/${evidenceId}`, { method: "PATCH", body: JSON.stringify(data) });
   },
   reorderEvidences(labId: number, evidenceIds: number[]) {
@@ -116,6 +116,30 @@ export const api = {
   },
   deleteEvidence(labId: number, evidenceId: number) {
     return request<void>(`/api/labs/${labId}/evidences/${evidenceId}`, { method: "DELETE" });
+  },
+  listFindings(labId: number) {
+    return request<Finding[]>(`/api/labs/${labId}/findings`);
+  },
+  getFinding(labId: number, findingId: number) {
+    return request<Finding>(`/api/labs/${labId}/findings/${findingId}`);
+  },
+  createFinding(labId: number, data: FindingInput) {
+    return request<Finding>(`/api/labs/${labId}/findings`, { method: "POST", body: JSON.stringify(data) });
+  },
+  updateFinding(labId: number, findingId: number, data: Partial<FindingInput>) {
+    return request<Finding>(`/api/labs/${labId}/findings/${findingId}`, { method: "PATCH", body: JSON.stringify(data) });
+  },
+  deleteFinding(labId: number, findingId: number) {
+    return request<void>(`/api/labs/${labId}/findings/${findingId}`, { method: "DELETE" });
+  },
+  reorderFindings(labId: number, findingIds: number[]) {
+    return request<Finding[]>(`/api/labs/${labId}/findings/order`, { method: "PATCH", body: JSON.stringify({ finding_ids: findingIds }) });
+  },
+  saveCVSS(labId: number, findingId: number, data: Pick<CVSSAssessment, "version" | "vector" | "score" | "severity" | "justification">) {
+    return request<CVSSAssessment>(`/api/labs/${labId}/findings/${findingId}/cvss`, { method: "PUT", body: JSON.stringify(data) });
+  },
+  deleteCVSS(labId: number, findingId: number) {
+    return request<void>(`/api/labs/${labId}/findings/${findingId}/cvss`, { method: "DELETE" });
   },
   getReport(labId: number) {
     return request<Report | null>(`/api/labs/${labId}/report`);

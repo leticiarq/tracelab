@@ -54,6 +54,10 @@ class Lab(Base):
     evidences: Mapped[list["Evidence"]] = relationship(  # noqa: F821
         back_populates="lab", cascade="all, delete-orphan", passive_deletes=True
     )
+    findings: Mapped[list["Finding"]] = relationship(  # noqa: F821
+        back_populates="lab", cascade="all, delete-orphan", passive_deletes=True,
+        order_by="Finding.display_order",
+    )
     report: Mapped["Report | None"] = relationship(  # noqa: F821
         back_populates="lab", cascade="all, delete-orphan", passive_deletes=True
     )
