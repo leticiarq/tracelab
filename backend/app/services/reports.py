@@ -21,6 +21,10 @@ SENSITIVE_PATTERNS = {
     "possível senha": re.compile(r"\b(?:password|passwd|senha)\s*[:=]\s*\S+", re.I),
     "possível token ou segredo": re.compile(r"\b(?:api[_-]?key|token|secret)\s*[:=]\s*[A-Za-z0-9_./+\-=]{8,}", re.I),
 }
+ACTIVE_HTML_PATTERN = re.compile(
+    r"<\s*/?\s*(?:script|iframe|object|embed|img|svg|style|link|meta|form|input|video|audio|source)\b",
+    re.I,
+)
 
 
 class InvalidReportError(ServiceError):
@@ -55,7 +59,11 @@ def evidence_export_name(evidence: Evidence, position: int) -> str:
 
 
 def _escape_inline(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+    single_line = " ".join(value.splitlines())
+    escaped = single_line.replace("\\", "\\\\")
+    for character in "`*_{}[]<>()#+-.!|":
+        escaped = escaped.replace(character, f"\\{character}")
+    return escaped
 
 
 def _section(number: int, title: str, content: str | None) -> str | None:
@@ -100,12 +108,12 @@ def build_markdown(lab: Lab, evidences: list[Evidence]) -> str:
         if evidence.step_label:
             evidence_lines.append(f"### {_escape_inline(evidence.step_label)}")
         if evidence.mime_type in IMAGE_TYPES:
-            alt = caption.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+            alt = _escape_inline(caption)
             evidence_lines.append(f"![{alt}](evidence/{name})")
         else:
             evidence_lines.append(f"[{_escape_inline(caption)}](evidence/{name})")
         if caption:
-            evidence_lines.append(f"_{caption}_")
+            evidence_lines.append(f"_{_escape_inline(caption)}_")
 
     sections = [
         f"# {lab.title}",
@@ -176,6 +184,8 @@ def export_report(db: Session, lab_id: int, evidence_ids: list[int], sensitive_r
         raise NotFoundError("Report not found")
     if not sensitive_reviewed:
         raise InvalidReportError("Sensitive information review must be confirmed")
+    if ACTIVE_HTML_PATTERN.search(report.markdown):
+        raise InvalidReportError("README contains active HTML; remove it before exporting")
     if len(set(evidence_ids)) != len(evidence_ids):
         raise InvalidReportError("Evidence selection contains duplicates")
 
