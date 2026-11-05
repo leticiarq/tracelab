@@ -21,6 +21,11 @@ build/
 # Local databases and application data
 backend/data/*
 !backend/data/.gitkeep
+local-data/
+private-evidence/
+screenshots/
+personal-reports/
+exports/
 *.db
 *.db-shm
 *.db-wal

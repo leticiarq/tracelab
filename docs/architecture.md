@@ -1,47 +1,54 @@
-# Initial architecture
+# Architecture
 
-## Goals
+## System overview
 
-The initial architecture favors local execution, explicit boundaries, and a small dependency footprint. The backend and frontend are independent projects so each can be installed, tested, and run separately.
+TraceLab is a local web application split into independently installable frontend and backend projects.
+
+```text
+Browser (React/Vite)
+        |
+        | local JSON/multipart HTTP
+        v
+FastAPI routes -> service rules -> SQLAlchemy -> SQLite
+                         |
+                         +--------------------> local evidence files
+                         |
+                         +--------------------> in-memory ZIP response
+```
+
+The browser defaults to `http://localhost:5173`; the API defaults to `http://127.0.0.1:8000`. There is no server-side rendering or separate worker process.
 
 ## Backend
 
-- `app/api/routes`: HTTP endpoints grouped by responsibility.
-- `app/core`: environment-backed application configuration.
-- `app/db`: SQLAlchemy base, engine, and session factory for SQLite.
-- `app/models`: persistent platform, category, and lab entities.
-- `app/schemas`: Pydantic request, response, and pagination contracts.
-- `app/services`: CRUD rules, relation validation, filtering, and collision-safe slugs.
-- `alembic`: versioned database schema migrations.
-- `tests`: API tests using pytest and FastAPI's test client.
+- `app/api/routes`: endpoints for health, platforms, categories, labs, findings, evidence, and reports.
+- `app/services`: relation checks, slugs, file handling, report generation, and ZIP validation.
+- `app/schemas`: Pydantic request and response contracts.
+- `app/models`: SQLAlchemy persistence models.
+- `app/core`: environment-backed settings and path resolution.
+- `app/db`: engine, sessions, and SQLite foreign-key activation.
+- `alembic`: ordered schema migrations.
+- `tests`: API, configuration, migration, export, and security-focused tests.
 
-FastAPI exposes `GET /health` and CRUD collections under `/api/platforms`, `/api/categories`, and `/api/labs`. Lab IDs are database-generated and remain stable when a title changes. Human-readable slugs are normalized and receive numeric suffixes on collisions.
-
-`Lab` owns zero or more ordered `Finding` records. Each finding may own one optional `CVSSAssessment`. `Evidence` always retains its required `lab_id` and may additionally reference a finding from the same lab; deleting a finding sets that association to null and keeps the evidence file. Reports remain one-per-lab so manually edited Markdown survives model migrations and ordinary finding edits until explicit regeneration.
-
-The current report format is a single `README.md`. A future separated mode can reuse finding slugs to create `findings/<slug>/README.md`; it is intentionally not implemented yet to keep export compatibility and path validation simple.
+Platforms contain categories and labs. A lab owns ordered findings, ordered evidence, and at most one saved report. Each finding may have one manually supplied CVSS assessment. Evidence always belongs to a lab and may optionally reference a finding in that same lab. Deleting a finding keeps its evidence and clears the association; deleting a lab removes its database children and stored evidence files.
 
 ## Frontend
 
-- `src`: React components and application entry point.
-- `src/test`: shared Vitest setup.
-- Vite provides the development and build tooling.
-- Tailwind CSS provides local styling without a component framework.
+The React application provides dashboard metrics, lab forms and filters, detail tabs, evidence management, finding management, and report editing. It uses a small internal navigation layer rather than a routing dependency. API access is centralized in `frontend/src/api.ts`.
 
-No router or state-management library is included because the current single-screen setup does not require either.
+Notes and report edits use explicit Save actions. Both surfaces warn about unsaved browser changes. Report preview is a deliberately limited renderer that creates React elements for supported Markdown constructs; it does not inject generated HTML.
 
-## Local data
+## Persistence and files
 
-SQLite is the persistence mechanism, with the database kept under `backend/data` and excluded from version control. Alembic owns schema creation and upgrades. Tests override the application session with a separate temporary SQLite database.
+SQLite is the default structured store at `backend/data/tracelab.db`. Alembic, not application startup, creates and upgrades the schema. Uploaded evidence is stored separately under `backend/data/evidences/` using generated filenames and restrictive file permissions. Metadata preserves the original filename, content type, size, SHA-256 digest, caption, step, and display order.
 
-Evidence is stored under `backend/data/evidences` with generated filenames and outside the frontend's public tree. Relative database and evidence paths are normalized against stable project directories, independently of the process working directory.
+The database and evidence directory are ignored by Git. Back up both together; see [Database backup](database-backup.md).
 
-## Security baseline
+## Report and export flow
 
-- The API and frontend bind to loopback addresses by default.
-- CORS allows only the configured local frontend origin and does not enable credentials.
-- Mutating browser requests from unconfigured origins and cross-site fetch contexts are rejected, and trusted Host values protect the loopback service from DNS rebinding.
-- Evidence uploads enforce extension, content signature, UTF-8/control-character, count, size, duplicate, and traversal checks.
-- Markdown preview is rendered as React text nodes; exports reject unsafe evidence paths, external images, active HTML, cross-lab files, and oversized archives.
-- Secrets and local data are excluded from version control.
-- No external authentication, telemetry, paid API, or hosted dependency is configured.
+Report generation reads the current lab, findings, CVSS records, and evidence ordering, then stores Markdown plus an evidence manifest. Regeneration is explicit because it replaces manual report edits. Export validates the saved report, selected evidence, manifest, references, active HTML, paths, duplicates, and total uncompressed input size before producing an in-memory ZIP.
+
+The export contains one root directory, one `README.md`, and an `evidence/` directory when files are selected. It does not write an export archive to the server filesystem.
+
+## Trust boundaries
+
+TraceLab assumes a trusted local user and has no authentication or authorization model. Loopback binding, trusted-host checks, configured CORS origins, and cross-site mutation rejection reduce exposure to other sites and DNS rebinding. File and archive validation limits common upload and path attacks. These controls do not make it appropriate for an untrusted multi-user network without additional protections.

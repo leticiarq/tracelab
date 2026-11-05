@@ -1,0 +1,4 @@
+### Synthetic request — example.invalid is reserved for documentation
+GET https://example.invalid/api/records/0002 HTTP/1.1
+Accept: application/json
+X-Demo-Session: REDACTED-SYNTHETIC-VALUE
