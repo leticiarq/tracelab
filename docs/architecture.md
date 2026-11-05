@@ -26,9 +26,9 @@ FastAPI exposes `GET /health` and CRUD collections under `/api/platforms`, `/api
 
 No router or state-management library is included because the current single-screen setup does not require either.
 
-## Local data and AI
+## Local data
 
-SQLite is the persistence mechanism, with the database kept under `backend/data` and excluded from version control. Alembic owns schema creation and upgrades. Tests override the application session with a separate temporary SQLite database. Ollama with `qwen3-vl:2b` is planned for a future milestone and is not integrated or downloaded in this setup.
+SQLite is the persistence mechanism, with the database kept under `backend/data` and excluded from version control. Alembic owns schema creation and upgrades. Tests override the application session with a separate temporary SQLite database.
 
 ## Security baseline
 

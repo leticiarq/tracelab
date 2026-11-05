@@ -1,4 +1,4 @@
-import type { AIGeneration, AIModel, AIReportAction, AIReportStyle, AIReportVersion, AISettings, AIStatus, Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report, SmartEvidenceAnalysis } from "./types";
+import type { Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -117,15 +117,6 @@ export const api = {
   deleteEvidence(labId: number, evidenceId: number) {
     return request<void>(`/api/labs/${labId}/evidences/${evidenceId}`, { method: "DELETE" });
   },
-  getEvidenceAnalysis(labId: number, evidenceId: number) {
-    return request<SmartEvidenceAnalysis | null>(`/api/labs/${labId}/evidences/${evidenceId}/analysis`);
-  },
-  analyzeEvidence(labId: number, evidenceId: number, force = false) {
-    return request<SmartEvidenceAnalysis>(`/api/labs/${labId}/evidences/${evidenceId}/analysis${force ? "?force=true" : ""}`, { method: "POST" });
-  },
-  reviewEvidenceAnalysis(labId: number, evidenceId: number, data: Partial<Pick<SmartEvidenceAnalysis, "detected_tool" | "visible_observations" | "objective_explanation" | "suggested_step" | "suggested_caption" | "possible_sensitive_data" | "uncertainties">> & { action: "edit" | "accept" | "reject" }) {
-    return request<SmartEvidenceAnalysis>(`/api/labs/${labId}/evidences/${evidenceId}/analysis`, { method: "PATCH", body: JSON.stringify(data) });
-  },
   getReport(labId: number) {
     return request<Report | null>(`/api/labs/${labId}/report`);
   },
@@ -137,36 +128,6 @@ export const api = {
   },
   exportReport(labId: number, evidenceIds: number[], sensitiveReviewed: boolean) {
     return requestBlob(`/api/labs/${labId}/report/export`, { method: "POST", body: JSON.stringify({ evidence_ids: evidenceIds, sensitive_reviewed: sensitiveReviewed }) });
-  },
-  listAIReportVersions(labId: number) {
-    return request<AIReportVersion[]>(`/api/labs/${labId}/report/ai/versions`);
-  },
-  generateAIReport(labId: number, action: AIReportAction, style: AIReportStyle, evidenceIds: number[]) {
-    return request<AIReportVersion>(`/api/labs/${labId}/report/ai/generate`, { method: "POST", body: JSON.stringify({ action, style, evidence_ids: evidenceIds }) });
-  },
-  reviewAIReport(labId: number, versionId: number, action: "accept" | "reject") {
-    return request<AIReportVersion>(`/api/labs/${labId}/report/ai/versions/${versionId}`, { method: "PATCH", body: JSON.stringify({ action }) });
-  },
-  getAISettings() {
-    return request<AISettings>("/api/ai/settings");
-  },
-  updateAISettings(data: { enabled?: boolean; model?: string }) {
-    return request<AISettings>("/api/ai/settings", { method: "PATCH", body: JSON.stringify(data) });
-  },
-  getAIStatus() {
-    return request<AIStatus>("/api/ai/status");
-  },
-  listAIModels() {
-    return request<AIModel[]>("/api/ai/models");
-  },
-  testAIConnection() {
-    return request<AIStatus>("/api/ai/test-connection", { method: "POST" });
-  },
-  testAIGeneration() {
-    return request<AIGeneration>("/api/ai/test-generation", { method: "POST" });
-  },
-  cancelAIOperation() {
-    return request<{ cancelled: boolean }>("/api/ai/operations/current", { method: "DELETE" });
   },
 };
 
