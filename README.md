@@ -39,7 +39,7 @@ Create a local environment file from the example:
 cp .env.example .env
 ```
 
-The defaults are suitable for local development. The SQLite database is stored in `backend/data/tracelab.db`. Local `.env` files and database files are ignored by Git.
+The defaults are suitable for local development. Relative data paths are resolved from stable project directories rather than the shell's current directory, so the SQLite database remains at `backend/data/tracelab.db`. Local `.env` files, database files, and evidence files are ignored by Git.
 
 ## Backend
 

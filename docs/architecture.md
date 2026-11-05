@@ -34,9 +34,14 @@ No router or state-management library is included because the current single-scr
 
 SQLite is the persistence mechanism, with the database kept under `backend/data` and excluded from version control. Alembic owns schema creation and upgrades. Tests override the application session with a separate temporary SQLite database.
 
+Evidence is stored under `backend/data/evidences` with generated filenames and outside the frontend's public tree. Relative database and evidence paths are normalized against stable project directories, independently of the process working directory.
+
 ## Security baseline
 
 - The API and frontend bind to loopback addresses by default.
 - CORS allows only the configured local frontend origin and does not enable credentials.
+- Mutating browser requests from unconfigured origins and cross-site fetch contexts are rejected, and trusted Host values protect the loopback service from DNS rebinding.
+- Evidence uploads enforce extension, content signature, UTF-8/control-character, count, size, duplicate, and traversal checks.
+- Markdown preview is rendered as React text nodes; exports reject unsafe evidence paths, external images, active HTML, cross-lab files, and oversized archives.
 - Secrets and local data are excluded from version control.
 - No external authentication, telemetry, paid API, or hosted dependency is configured.

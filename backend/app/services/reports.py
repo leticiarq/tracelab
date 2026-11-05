@@ -22,6 +22,10 @@ SENSITIVE_PATTERNS = {
     "possível senha": re.compile(r"\b(?:password|passwd|senha)\s*[:=]\s*\S+", re.I),
     "possível token ou segredo": re.compile(r"\b(?:api[_-]?key|token|secret)\s*[:=]\s*[A-Za-z0-9_./+\-=]{8,}", re.I),
 }
+ACTIVE_HTML_PATTERN = re.compile(
+    r"<\s*/?\s*(?:script|iframe|object|embed|img|svg|style|link|meta|form|input|video|audio|source)\b",
+    re.I,
+)
 
 
 class InvalidReportError(ServiceError):
@@ -67,7 +71,11 @@ def evidence_export_name(evidence: Evidence, position: int) -> str:
 
 
 def _escape_inline(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]").replace("|", "\\|")
+    single_line = " ".join(value.splitlines())
+    escaped = single_line.replace("\\", "\\\\")
+    for character in "`*_{}[]<>()#+-.!|":
+        escaped = escaped.replace(character, f"\\{character}")
+    return escaped
 
 
 def _section(number: int, title: str, content: str | None) -> str | None:
@@ -114,13 +122,13 @@ def _evidence_markdown(evidences: list[Evidence], all_evidences: list[Evidence])
             lines.append(f"![{_escape_inline(caption)}](evidence/{name})")
         else:
             lines.append(f"[{_escape_inline(caption)}](evidence/{name})")
-        lines.append(f"_{caption}_")
+        lines.append(f"_{_escape_inline(caption)}_")
     return "\n\n".join(lines)
 
 
 def _finding_section(finding: Finding, evidences: list[Evidence], all_evidences: list[Evidence], level: int) -> str:
     heading = "#" * level
-    parts = [f"{heading} {finding.title}"]
+    parts = [f"{heading} {_escape_inline(finding.title)}"]
     metadata = []
     if finding.category:
         metadata.append(f"- Categoria: {_escape_inline(finding.category)}")
@@ -163,7 +171,7 @@ def build_markdown(lab: Lab, findings: list[Finding], evidences: list[Evidence])
     if lab.source_url:
         general.append(f"- Link original: <{lab.source_url}>")
 
-    sections: list[str | None] = [f"# {lab.title}", "## 1. Informações gerais\n\n" + "\n".join(general)]
+    sections: list[str | None] = [f"# {_escape_inline(lab.title)}", "## 1. Informações gerais\n\n" + "\n".join(general)]
     sections.append(_section(2, "Objetivo", lab.objective))
     if findings:
         sections.append(_section(3, "Metodologia geral", lab.notes))
@@ -257,6 +265,8 @@ def export_report(db: Session, lab_id: int, evidence_ids: list[int], sensitive_r
         raise NotFoundError("Report not found")
     if not sensitive_reviewed:
         raise InvalidReportError("Sensitive information review must be confirmed")
+    if ACTIVE_HTML_PATTERN.search(report.markdown):
+        raise InvalidReportError("README contains active HTML; remove it before exporting")
     if len(set(evidence_ids)) != len(evidence_ids):
         raise InvalidReportError("Evidence selection contains duplicates")
 

@@ -14,10 +14,10 @@ alembic = "^1.17.0"
 pydantic-settings = "^2.6.0"
 uvicorn = { version = "^0.54.0", extras = ["standard"] }
 python-multipart = "^0.0.20"
-httpx = "^0.28.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.0"
+httpx = "^0.28.0"
 
 [build-system]
 requires = ["poetry-core"]

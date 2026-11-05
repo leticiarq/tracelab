@@ -170,3 +170,36 @@ async def test_export_enforces_size_limit_and_blocks_external_images(
         json={"evidence_ids": [], "sensitive_reviewed": True},
     )
     assert too_large.status_code == 413
+
+
+async def test_export_blocks_active_html_and_generated_metadata_injection(
+    client: httpx.AsyncClient,
+) -> None:
+    lab = await prepared_lab(client)
+    uploaded = await client.post(
+        f"/api/labs/{lab['id']}/evidences",
+        files={"files": ("proof.png", PNG, "image/png")},
+    )
+    evidence = uploaded.json()[0]
+    await client.patch(
+        f"/api/labs/{lab['id']}/evidences/{evidence['id']}",
+        json={
+            "description": "caption\n![external](https://attacker.example/a.png)",
+            "step_label": "step\n<script>alert(1)</script>",
+        },
+    )
+    generated = await client.post(f"/api/labs/{lab['id']}/report/generate", json={})
+    markdown = generated.json()["markdown"]
+    assert "caption \\!\\[external\\]" in markdown
+    assert "https://attacker.example/a.png" not in markdown
+    assert "<script>" not in markdown
+
+    await client.put(
+        f"/api/labs/{lab['id']}/report",
+        json={"markdown": "# Manual\n\n<img src=x onerror=alert(1)>"},
+    )
+    blocked = await client.post(
+        f"/api/labs/{lab['id']}/report/export",
+        json={"evidence_ids": [], "sensitive_reviewed": True},
+    )
+    assert blocked.status_code == 422
