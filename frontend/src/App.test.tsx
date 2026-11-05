@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import type { AIReportVersion, Evidence, Lab, Report, SmartEvidenceAnalysis } from "./types";
+import type { Evidence, Finding, Lab, Report } from "./types";
 import { SafeMarkdown } from "./pages/ReportTab";
 
 const platform = { id: 1, name: "Hack The Box", slug: "hack-the-box", website_url: "https://hackthebox.com", created_at: "2026-11-01T12:00:00Z" };
@@ -15,21 +15,11 @@ function json(body: unknown, status = 200) { return Promise.resolve(new Response
 function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
   const labs = initialLabs.map((lab) => ({ ...lab }));
   const evidences: Evidence[] = [];
+  const findings: Finding[] = [];
   let report: Report | null = null;
-  const aiReportVersions: AIReportVersion[] = [];
-  const analyses = new Map<number, SmartEvidenceAnalysis>();
-  let aiSettings = { enabled: true, model: "qwen3-vl:2b", timeout_seconds: 120, keep_alive: "5m", base_url: "http://127.0.0.1:11434" };
-  const aiStatus = () => ({ enabled: aiSettings.enabled, available: aiSettings.enabled, version: aiSettings.enabled ? "0.12.0" : null, selected_model: aiSettings.model, selected_model_installed: aiSettings.enabled, capabilities: aiSettings.enabled ? { text: true, images: true, declared: ["completion", "vision"] } : null, error: aiSettings.enabled ? null : "A IA está desativada." });
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     const method = init?.method || "GET";
-    if (url.pathname === "/api/ai/settings" && method === "GET") return json(aiSettings);
-    if (url.pathname === "/api/ai/settings" && method === "PATCH") { aiSettings = { ...aiSettings, ...JSON.parse(String(init?.body)) }; return json(aiSettings); }
-    if (url.pathname === "/api/ai/status" && method === "GET") return json(aiStatus());
-    if (url.pathname === "/api/ai/models" && method === "GET") return json([{ name: "qwen3-vl:2b", size: 1_900_000_000, modified_at: null, capabilities: { text: true, images: true, declared: ["completion", "vision"] } }]);
-    if (url.pathname === "/api/ai/test-connection" && method === "POST") return json(aiStatus());
-    if (url.pathname === "/api/ai/test-generation" && method === "POST") return json({ model: aiSettings.model, text: "Geração local funcionando.", done: true });
-    if (url.pathname === "/api/ai/operations/current" && method === "DELETE") return json({ cancelled: true });
     if (url.pathname === "/api/platforms" && method === "GET") return json(page([platform]));
     if (url.pathname === "/api/categories" && method === "GET") return json(page([category]));
     if (url.pathname === "/api/labs" && method === "GET") {
@@ -50,19 +40,6 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
       const lab = { ...baseLab, ...payload, id: labs.length + 1, slug: payload.title.toLowerCase().replaceAll(" ", "-"), notes: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       labs.unshift(lab); return json(lab, 201);
     }
-    const aiReportCollection = url.pathname.match(/^\/api\/labs\/(\d+)\/report\/ai\/versions$/);
-    if (aiReportCollection && method === "GET") return json(aiReportVersions);
-    const aiReportGenerate = url.pathname.match(/^\/api\/labs\/(\d+)\/report\/ai\/generate$/);
-    if (aiReportGenerate && method === "POST") {
-      const payload = JSON.parse(String(init?.body)); const now = new Date().toISOString();
-      const version: AIReportVersion = { id: aiReportVersions.length + 1, lab_id: Number(aiReportGenerate[1]), action: payload.action, style: payload.style, status: "suggested", model_name: aiSettings.model, original_text: baseLab.notes, suggested_text: "# Cache Poisoning\n\n## Objetivo\n\nDocumentação sugerida localmente.", ambiguities: ["Ferramenta não informada."], questions: ["Qual ferramenta foi utilizada?"], created_at: now, updated_at: now };
-      aiReportVersions.unshift(version); return json(version);
-    }
-    const aiReportReview = url.pathname.match(/^\/api\/labs\/(\d+)\/report\/ai\/versions\/(\d+)$/);
-    if (aiReportReview && method === "PATCH") {
-      const version = aiReportVersions.find((item) => item.id === Number(aiReportReview[2]))!; const action = JSON.parse(String(init?.body)).action;
-      version.status = action === "accept" ? "accepted" : "rejected"; version.updated_at = new Date().toISOString(); return json(version);
-    }
     const reportRoute = url.pathname.match(/^\/api\/labs\/(\d+)\/report$/);
     if (reportRoute) {
       const labId = Number(reportRoute[1]);
@@ -82,33 +59,38 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
       if (method === "GET") return json(evidences.filter((item) => item.lab_id === labId).sort((a, b) => a.display_order - b.display_order));
       if (method === "POST") {
         const files = Array.from((init?.body as FormData).getAll("files")) as File[];
-        const created = files.map((file, index): Evidence => ({ id: evidences.length + index + 1, lab_id: labId, original_filename: file.name, stored_filename: `${crypto.randomUUID()}.png`, mime_type: file.type || "image/png", file_size: file.size, sha256: "a".repeat(64), description: file.name.replace(/\.[^.]+$/, ""), step_label: null, display_order: evidences.length + index, created_at: new Date().toISOString() }));
+        const created = files.map((file, index): Evidence => ({ id: evidences.length + index + 1, lab_id: labId, finding_id: null, original_filename: file.name, stored_filename: `${crypto.randomUUID()}.png`, mime_type: file.type || "image/png", file_size: file.size, sha256: "a".repeat(64), description: file.name.replace(/\.[^.]+$/, ""), step_label: null, display_order: evidences.length + index, created_at: new Date().toISOString() }));
         evidences.push(...created); return json(created, 201);
       }
+    }
+    const findingCollection = url.pathname.match(/^\/api\/labs\/(\d+)\/findings$/);
+    if (findingCollection) {
+      const labId = Number(findingCollection[1]);
+      if (method === "GET") return json(findings.filter((item) => item.lab_id === labId));
+      if (method === "POST") {
+        const payload = JSON.parse(String(init?.body)); const now = new Date().toISOString();
+        const finding: Finding = { ...payload, id: findings.length + 1, lab_id: labId, slug: payload.title.toLowerCase().replaceAll(" ", "-"), display_order: findings.length, created_at: now, updated_at: now, cvss_assessment: null };
+        findings.push(finding); return json(finding, 201);
+      }
+    }
+    const findingOrder = url.pathname.match(/^\/api\/labs\/(\d+)\/findings\/order$/);
+    if (findingOrder && method === "PATCH") {
+      const ids = JSON.parse(String(init?.body)).finding_ids as number[];
+      ids.forEach((id, order) => { const item = findings.find((finding) => finding.id === id); if (item) item.display_order = order; });
+      return json(ids.map((id) => findings.find((item) => item.id === id)));
+    }
+    const findingItem = url.pathname.match(/^\/api\/labs\/(\d+)\/findings\/(\d+)$/);
+    if (findingItem) {
+      const id = Number(findingItem[2]); const index = findings.findIndex((item) => item.id === id);
+      if (index < 0) return json({ detail: "Finding not found" }, 404);
+      if (method === "PATCH") { findings[index] = { ...findings[index], ...JSON.parse(String(init?.body)) }; return json(findings[index]); }
+      if (method === "DELETE") { findings.splice(index, 1); return Promise.resolve(new Response(null, { status: 204 })); }
     }
     const evidenceOrder = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences\/order$/);
     if (evidenceOrder && method === "PATCH") {
       const ids = JSON.parse(String(init?.body)).evidence_ids as number[];
       ids.forEach((id, displayOrder) => { const item = evidences.find((evidence) => evidence.id === id); if (item) item.display_order = displayOrder; });
       return json(ids.map((id) => evidences.find((item) => item.id === id)));
-    }
-    const analysisRoute = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences\/(\d+)\/analysis$/);
-    if (analysisRoute) {
-      const id = Number(analysisRoute[2]);
-      if (method === "GET") return json(analyses.get(id) ?? null);
-      if (method === "POST") {
-        const now = new Date().toISOString();
-        const analysis: SmartEvidenceAnalysis = { id, evidence_id: id, image_sha256: "a".repeat(64), model_name: aiSettings.model, instruction_version: "smart-evidence-v1", detected_tool: "Burp Suite Repeater", visible_observations: ["Resposta HTTP 200 visível"], objective_explanation: "Observação: resposta 200. Inferência: a requisição foi repetida.", suggested_step: "02 · Validação", suggested_caption: "Resposta HTTP no Repeater", possible_sensitive_data: ["Possível cookie"], uncertainties: [], status: "suggested", created_at: now, updated_at: now, cached: false };
-        analyses.set(id, analysis); return json(analysis);
-      }
-      if (method === "PATCH") {
-        const payload = JSON.parse(String(init?.body)); const current = analyses.get(id)!;
-        const updated = { ...current, ...payload, status: payload.action === "accept" ? "accepted" : payload.action === "reject" ? "rejected" : "suggested", updated_at: new Date().toISOString() } as SmartEvidenceAnalysis;
-        delete (updated as SmartEvidenceAnalysis & { action?: string }).action;
-        analyses.set(id, updated);
-        if (payload.action === "accept") { const evidence = evidences.find((item) => item.id === id)!; evidence.description = updated.suggested_caption; evidence.step_label = updated.suggested_step; }
-        return json(updated);
-      }
     }
     const evidenceItem = url.pathname.match(/^\/api\/labs\/(\d+)\/evidences\/(\d+)$/);
     if (evidenceItem) {
@@ -128,7 +110,7 @@ function installApi(initialLabs: Lab[] = [baseLab], failLabs = false) {
     return json({ detail: "Not found" }, 404);
   });
   vi.stubGlobal("fetch", fetchMock);
-  return { labs, evidences, fetchMock, get report() { return report; } };
+  return { labs, evidences, findings, fetchMock, get report() { return report; } };
 }
 
 beforeEach(() => { window.history.replaceState({}, "", "/"); vi.stubGlobal("scrollTo", vi.fn()); });
@@ -214,23 +196,15 @@ describe("TraceLab", () => {
     expect(screen.getByText("3", { selector: ".evidence-heading span" })).toBeInTheDocument();
   });
 
-  it("analisa, permite revisar a legenda e aceita Smart Evidence", async () => {
+  it("adiciona e edita uma vulnerabilidade sem exigir CVSS", async () => {
     const mock = installApi(); window.history.replaceState({}, "", "/labs/1"); render(<App />);
-    fireEvent.click(await screen.findByRole("tab", { name: "Evidências" }));
-    fireEvent.change(await screen.findByLabelText("Selecionar evidências"), { target: { files: [new File(["shot"], "repeater.png", { type: "image/png" })] } });
-    await screen.findByText("1 evidência enviada com sucesso.");
-    fireEvent.click(await screen.findByRole("button", { name: "Analisar com IA" }));
-    expect(await screen.findByDisplayValue("Resposta HTTP no Repeater")).toBeDisabled();
-    expect(screen.getByDisplayValue("Possível cookie")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Editar análise" }));
-    fireEvent.change(screen.getByLabelText("Legenda sugerida"), { target: { value: "Resposta 200 confirmada visualmente" } });
-    fireEvent.change(screen.getByLabelText("Etapa sugerida"), { target: { value: "02 · Revisão manual" } });
-    fireEvent.click(screen.getByRole("button", { name: "Salvar análise" }));
-    await screen.findByText("Análise editada e salva para revisão.");
-    fireEvent.click(screen.getByRole("button", { name: "Aceitar" }));
-    await screen.findByText("Análise aceita; legenda e etapa estão disponíveis para o README.");
-    await waitFor(() => expect(mock.evidences[0].description).toBe("Resposta 200 confirmada visualmente"));
-    expect(mock.evidences[0].step_label).toBe("02 · Revisão manual");
+    fireEvent.click(await screen.findByRole("tab", { name: "Vulnerabilidades" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Adicionar primeira vulnerabilidade" }));
+    fireEvent.change(screen.getByLabelText("Título da vulnerabilidade"), { target: { value: "SQL Injection" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar vulnerabilidade" }));
+    await waitFor(() => expect(mock.findings).toHaveLength(1));
+    expect(mock.findings[0].title).toBe("SQL Injection");
+    expect(mock.findings[0].cvss_assessment).toBeNull();
   });
 
   it("gera, edita e persiste o Markdown separadamente das anotações", async () => {
@@ -249,20 +223,6 @@ describe("TraceLab", () => {
     expect(mock.labs[0].notes).toBe(baseLab.notes);
   });
 
-  it("gera README com Ollama, compara e exige aceite humano antes do editor", async () => {
-    const mock = installApi(); window.history.replaceState({}, "", "/labs/1"); render(<App />);
-    fireEvent.click(await screen.findByRole("tab", { name: "Relatório" }));
-    fireEvent.change(await screen.findByLabelText("Estilo do relatório"), { target: { value: "study" } });
-    fireEvent.click(screen.getByRole("button", { name: "Gerar README com IA" }));
-    expect(await screen.findByLabelText("Texto original")).toHaveValue(baseLab.notes);
-    expect((screen.getByLabelText("Texto sugerido") as HTMLTextAreaElement).value).toContain("Documentação sugerida");
-    expect(screen.getByText("Qual ferramenta foi utilizada?")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Editor Markdown")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Aceitar no editor" }));
-    expect(((await screen.findByLabelText("Editor Markdown")) as HTMLTextAreaElement).value).toContain("Documentação sugerida");
-    expect(mock.labs[0].notes).toBe(baseLab.notes);
-  });
-
   it("renderiza Markdown sem executar HTML ou imagens externas", () => {
     const view = render(<SafeMarkdown markdown={'# Seguro\n\n<script>alert("x")</script>\n\n![externa](https://evil.invalid/x.png)'} imageMap={new Map()} />);
     expect(screen.getByRole("heading", { name: "Seguro" })).toBeInTheDocument();
@@ -277,15 +237,4 @@ describe("TraceLab", () => {
     expect(screen.getByRole("button", { name: "Tentar novamente" })).toBeInTheDocument();
   });
 
-  it("configura e testa a integração local de IA", async () => {
-    installApi(); window.history.replaceState({}, "", "/settings/ai"); render(<App />);
-    expect(await screen.findByRole("heading", { name: "Configurações de IA" })).toBeInTheDocument();
-    expect(screen.getByText("Ollama disponível")).toBeInTheDocument();
-    expect(screen.getByLabelText("Modelo selecionado")).toHaveValue("qwen3-vl:2b");
-    fireEvent.click(screen.getByRole("button", { name: "Testar geração" }));
-    expect(await screen.findByText("Geração local funcionando.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect((await screen.findAllByText("Desativada")).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Testar geração" })).toBeDisabled();
-  });
 });

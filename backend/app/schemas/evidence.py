@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class EvidenceRead(BaseModel):
     id: int
     lab_id: int
+    finding_id: int | None
     original_filename: str
     stored_filename: str
     mime_type: str
@@ -22,6 +23,7 @@ class EvidenceRead(BaseModel):
 class EvidenceUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2_000)
     step_label: str | None = Field(default=None, max_length=200)
+    finding_id: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def reject_null_description(self) -> "EvidenceUpdate":

@@ -1,4 +1,4 @@
-import type { AIGeneration, AIModel, AIReportAction, AIReportStyle, AIReportVersion, AISettings, AIStatus, Category, Evidence, Lab, LabInput, LabStatus, Page, Platform, Report, SmartEvidenceAnalysis } from "./types";
+import type { Category, CVSSAssessment, Evidence, Finding, FindingInput, Lab, LabInput, LabStatus, Page, Platform, Report } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -108,7 +108,7 @@ export const api = {
     files.forEach((file) => body.append("files", file));
     return request<Evidence[]>(`/api/labs/${labId}/evidences`, { method: "POST", body });
   },
-  updateEvidence(labId: number, evidenceId: number, data: { description?: string; step_label?: string | null }) {
+  updateEvidence(labId: number, evidenceId: number, data: { description?: string; step_label?: string | null; finding_id?: number | null }) {
     return request<Evidence>(`/api/labs/${labId}/evidences/${evidenceId}`, { method: "PATCH", body: JSON.stringify(data) });
   },
   reorderEvidences(labId: number, evidenceIds: number[]) {
@@ -117,14 +117,29 @@ export const api = {
   deleteEvidence(labId: number, evidenceId: number) {
     return request<void>(`/api/labs/${labId}/evidences/${evidenceId}`, { method: "DELETE" });
   },
-  getEvidenceAnalysis(labId: number, evidenceId: number) {
-    return request<SmartEvidenceAnalysis | null>(`/api/labs/${labId}/evidences/${evidenceId}/analysis`);
+  listFindings(labId: number) {
+    return request<Finding[]>(`/api/labs/${labId}/findings`);
   },
-  analyzeEvidence(labId: number, evidenceId: number, force = false) {
-    return request<SmartEvidenceAnalysis>(`/api/labs/${labId}/evidences/${evidenceId}/analysis${force ? "?force=true" : ""}`, { method: "POST" });
+  getFinding(labId: number, findingId: number) {
+    return request<Finding>(`/api/labs/${labId}/findings/${findingId}`);
   },
-  reviewEvidenceAnalysis(labId: number, evidenceId: number, data: Partial<Pick<SmartEvidenceAnalysis, "detected_tool" | "visible_observations" | "objective_explanation" | "suggested_step" | "suggested_caption" | "possible_sensitive_data" | "uncertainties">> & { action: "edit" | "accept" | "reject" }) {
-    return request<SmartEvidenceAnalysis>(`/api/labs/${labId}/evidences/${evidenceId}/analysis`, { method: "PATCH", body: JSON.stringify(data) });
+  createFinding(labId: number, data: FindingInput) {
+    return request<Finding>(`/api/labs/${labId}/findings`, { method: "POST", body: JSON.stringify(data) });
+  },
+  updateFinding(labId: number, findingId: number, data: Partial<FindingInput>) {
+    return request<Finding>(`/api/labs/${labId}/findings/${findingId}`, { method: "PATCH", body: JSON.stringify(data) });
+  },
+  deleteFinding(labId: number, findingId: number) {
+    return request<void>(`/api/labs/${labId}/findings/${findingId}`, { method: "DELETE" });
+  },
+  reorderFindings(labId: number, findingIds: number[]) {
+    return request<Finding[]>(`/api/labs/${labId}/findings/order`, { method: "PATCH", body: JSON.stringify({ finding_ids: findingIds }) });
+  },
+  saveCVSS(labId: number, findingId: number, data: Pick<CVSSAssessment, "version" | "vector" | "score" | "severity" | "justification">) {
+    return request<CVSSAssessment>(`/api/labs/${labId}/findings/${findingId}/cvss`, { method: "PUT", body: JSON.stringify(data) });
+  },
+  deleteCVSS(labId: number, findingId: number) {
+    return request<void>(`/api/labs/${labId}/findings/${findingId}/cvss`, { method: "DELETE" });
   },
   getReport(labId: number) {
     return request<Report | null>(`/api/labs/${labId}/report`);
@@ -137,36 +152,6 @@ export const api = {
   },
   exportReport(labId: number, evidenceIds: number[], sensitiveReviewed: boolean) {
     return requestBlob(`/api/labs/${labId}/report/export`, { method: "POST", body: JSON.stringify({ evidence_ids: evidenceIds, sensitive_reviewed: sensitiveReviewed }) });
-  },
-  listAIReportVersions(labId: number) {
-    return request<AIReportVersion[]>(`/api/labs/${labId}/report/ai/versions`);
-  },
-  generateAIReport(labId: number, action: AIReportAction, style: AIReportStyle, evidenceIds: number[]) {
-    return request<AIReportVersion>(`/api/labs/${labId}/report/ai/generate`, { method: "POST", body: JSON.stringify({ action, style, evidence_ids: evidenceIds }) });
-  },
-  reviewAIReport(labId: number, versionId: number, action: "accept" | "reject") {
-    return request<AIReportVersion>(`/api/labs/${labId}/report/ai/versions/${versionId}`, { method: "PATCH", body: JSON.stringify({ action }) });
-  },
-  getAISettings() {
-    return request<AISettings>("/api/ai/settings");
-  },
-  updateAISettings(data: { enabled?: boolean; model?: string }) {
-    return request<AISettings>("/api/ai/settings", { method: "PATCH", body: JSON.stringify(data) });
-  },
-  getAIStatus() {
-    return request<AIStatus>("/api/ai/status");
-  },
-  listAIModels() {
-    return request<AIModel[]>("/api/ai/models");
-  },
-  testAIConnection() {
-    return request<AIStatus>("/api/ai/test-connection", { method: "POST" });
-  },
-  testAIGeneration() {
-    return request<AIGeneration>("/api/ai/test-generation", { method: "POST" });
-  },
-  cancelAIOperation() {
-    return request<{ cancelled: boolean }>("/api/ai/operations/current", { method: "DELETE" });
   },
 };
 

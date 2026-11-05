@@ -56,6 +56,7 @@ export interface LabInput {
 export interface Evidence {
   id: number;
   lab_id: number;
+  finding_id: number | null;
   original_filename: string;
   stored_filename: string;
   mime_type: string;
@@ -67,26 +68,41 @@ export interface Evidence {
   created_at: string;
 }
 
-export type SmartEvidenceStatus = "suggested" | "accepted" | "rejected";
+export type FindingStatus = "open" | "confirmed" | "remediated" | "accepted_risk";
 
-export interface SmartEvidenceAnalysis {
+export interface CVSSAssessment {
   id: number;
-  evidence_id: number;
-  image_sha256: string;
-  model_name: string;
-  instruction_version: string;
-  detected_tool: string | null;
-  visible_observations: string[];
-  objective_explanation: string;
-  suggested_step: string | null;
-  suggested_caption: string;
-  possible_sensitive_data: string[];
-  uncertainties: string[];
-  status: SmartEvidenceStatus;
+  finding_id: number;
+  version: string;
+  vector: string;
+  score: number;
+  severity: string;
+  justification: string;
   created_at: string;
   updated_at: string;
-  cached: boolean;
 }
+
+export interface Finding {
+  id: number;
+  lab_id: number;
+  title: string;
+  slug: string;
+  category: string | null;
+  cwe_id: string | null;
+  description: string;
+  technical_details: string;
+  reproduction_steps: string;
+  impact: string;
+  mitigation: string;
+  status: FindingStatus;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+  cvss_assessment: CVSSAssessment | null;
+  evidences?: Evidence[];
+}
+
+export type FindingInput = Pick<Finding, "title" | "category" | "cwe_id" | "description" | "technical_details" | "reproduction_steps" | "impact" | "mitigation" | "status">;
 
 export interface Report {
   id: number;
@@ -97,62 +113,6 @@ export interface Report {
   updated_at: string;
   incomplete_fields: string[];
   sensitive_warnings: string[];
-}
-
-export type AIReportAction = "improve_notes" | "explain_vulnerability" | "missing_information" | "generate_readme";
-export type AIReportStyle = "professional" | "github" | "study";
-export type AIReportStatus = "suggested" | "accepted" | "rejected";
-
-export interface AIReportVersion {
-  id: number;
-  lab_id: number;
-  action: AIReportAction;
-  style: AIReportStyle;
-  status: AIReportStatus;
-  model_name: string;
-  original_text: string;
-  suggested_text: string;
-  ambiguities: string[];
-  questions: string[];
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AICapabilities {
-  text: boolean;
-  images: boolean;
-  declared: string[];
-}
-
-export interface AIModel {
-  name: string;
-  size: number | null;
-  modified_at: string | null;
-  capabilities: AICapabilities | null;
-}
-
-export interface AISettings {
-  enabled: boolean;
-  model: string;
-  timeout_seconds: number;
-  keep_alive: string;
-  base_url: string;
-}
-
-export interface AIStatus {
-  enabled: boolean;
-  available: boolean;
-  version: string | null;
-  selected_model: string;
-  selected_model_installed: boolean;
-  capabilities: AICapabilities | null;
-  error: string | null;
-}
-
-export interface AIGeneration {
-  model: string;
-  text: string;
-  done: boolean;
 }
 
 export const STATUS_LABELS: Record<LabStatus, string> = {

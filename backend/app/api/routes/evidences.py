@@ -4,12 +4,9 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.routes import ai as ai_routes
 from app.db.session import get_db
 from app.schemas.evidence import EvidenceRead, EvidenceReorder, EvidenceUpdate
-from app.schemas.smart_evidence import SmartEvidenceRead, SmartEvidenceReview
 from app.services import evidences as service
-from app.services import smart_evidence
 
 router = APIRouter(prefix="/api/labs/{lab_id}/evidences", tags=["evidences"])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -27,37 +24,6 @@ async def upload_evidences(
     files: Annotated[list[UploadFile], File(description="Evidence files")],
 ) -> object:
     return await service.upload_evidences(db, lab_id, files)
-
-
-@router.get("/{evidence_id}/analysis", response_model=SmartEvidenceRead | None)
-async def get_smart_analysis(
-    lab_id: int, evidence_id: int, db: DbSession
-) -> SmartEvidenceRead | None:
-    analysis = smart_evidence.get_analysis(db, lab_id, evidence_id)
-    return SmartEvidenceRead.model_validate(analysis) if analysis else None
-
-
-@router.post("/{evidence_id}/analysis", response_model=SmartEvidenceRead)
-async def analyze_evidence(
-    lab_id: int, evidence_id: int, db: DbSession, force: bool = False
-) -> SmartEvidenceRead:
-    analysis, cached = await smart_evidence.analyze(
-        db, lab_id, evidence_id, ai_routes.get_ai_service(), force=force
-    )
-    response = SmartEvidenceRead.model_validate(analysis)
-    return response.model_copy(update={"cached": cached})
-
-
-@router.patch("/{evidence_id}/analysis", response_model=SmartEvidenceRead)
-async def review_smart_analysis(
-    lab_id: int,
-    evidence_id: int,
-    data: SmartEvidenceReview,
-    db: DbSession,
-) -> SmartEvidenceRead:
-    return SmartEvidenceRead.model_validate(
-        smart_evidence.review(db, lab_id, evidence_id, data)
-    )
 
 
 @router.patch("/order", response_model=list[EvidenceRead])

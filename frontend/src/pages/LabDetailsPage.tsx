@@ -5,9 +5,10 @@ import { api } from "../api";
 import { Button, ErrorState, Icons, LoadingState, StatusBadge, Toast } from "../components";
 import type { Category, Lab, Platform } from "../types";
 import { EvidenceTab } from "./EvidenceTab";
+import { FindingsTab } from "./FindingsTab";
 import { ReportTab } from "./ReportTab";
 
-type Tab = "info" | "notes" | "evidence" | "report";
+type Tab = "info" | "notes" | "findings" | "evidence" | "report";
 
 export function LabDetailsPage({ navigate, labId }: { navigate: Navigate; labId: number }) {
   const [lab, setLab] = useState<Lab | null>(null);
@@ -50,7 +51,7 @@ export function LabDetailsPage({ navigate, labId }: { navigate: Navigate; labId:
   if (error && !lab) return <div className="page"><ErrorState message={error} retry={() => void load()} /></div>;
   if (!lab) return null;
 
-  const tabs: Array<{ id: Tab; label: string }> = [{ id: "info", label: "Informações" }, { id: "notes", label: "Anotações" }, { id: "evidence", label: "Evidências" }, { id: "report", label: "Relatório" }];
+  const tabs: Array<{ id: Tab; label: string }> = [{ id: "info", label: "Informações" }, { id: "notes", label: "Anotações" }, { id: "findings", label: "Vulnerabilidades" }, { id: "evidence", label: "Evidências" }, { id: "report", label: "Relatório" }];
 
   return (
     <div className="page details-page">
@@ -71,6 +72,7 @@ export function LabDetailsPage({ navigate, labId }: { navigate: Navigate; labId:
         </section>
       )}
       {tab === "evidence" && <EvidenceTab labId={lab.id} notify={(message) => { setToast(message); window.setTimeout(() => setToast(""), 3500); }} />}
+      {tab === "findings" && <FindingsTab labId={lab.id} notify={(message) => { setToast(message); window.setTimeout(() => setToast(""), 3500); }} />}
       {tab === "report" && <ReportTab lab={lab} onLabChange={setLab} notify={(message) => { setToast(message); window.setTimeout(() => setToast(""), 3500); }} />}
       {toast && <Toast message={toast} />}
     </div>
